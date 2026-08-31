@@ -1,0 +1,44 @@
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE / Editor files
+.idea/
+.vscode/
+
+# OS / System files
+.DS_Store
+Thumbs.db
+
+# Python specific data and build artifacts
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+*.cache
+
+# Environment variables, credentials, local data (based on user request)
+# Backup or local configuration files should be ignored.
+.env*
+*.bak*
+*.local
+
+# ML Model outputs and large data
+data/
+models/
+*/.pkl
+*/.pt
+*/.pth
+*/.h5
+
+# Git metadata (though usually ignored by default, explicit is safer)
+.git/
+
+# Logs and temporary files
+*.log
+tmp/

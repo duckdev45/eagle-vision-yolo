@@ -1,0 +1,131 @@
+{
+ "top1": 0.8475,
+ "macroF1": 0.7914,
+ "support": 118,
+ "perClass": {
+  "基礎-連續壁": {
+   "precision": 1.0,
+   "recall": 0.8333333333333334,
+   "f1-score": 0.9090909090909091,
+   "support": 6.0
+  },
+  "木作-天花封板": {
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1-score": 1.0,
+   "support": 8.0
+  },
+  "植栽-景觀": {
+   "precision": 0.5,
+   "recall": 0.75,
+   "f1-score": 0.6,
+   "support": 4.0
+  },
+  "油漆-批土塗裝": {
+   "precision": 0.8611111111111112,
+   "recall": 0.9117647058823529,
+   "f1-score": 0.8857142857142857,
+   "support": 34.0
+  },
+  "泥作-地磚貼飾": {
+   "precision": 0.875,
+   "recall": 0.7777777777777778,
+   "f1-score": 0.8235294117647058,
+   "support": 18.0
+  },
+  "泥作-壁磚貼飾": {
+   "precision": 0.7692307692307693,
+   "recall": 1.0,
+   "f1-score": 0.8695652173913043,
+   "support": 10.0
+  },
+  "泥作-打底粉光": {
+   "precision": 0.9047619047619048,
+   "recall": 0.95,
+   "f1-score": 0.926829268292683,
+   "support": 20.0
+  },
+  "設備-電梯停車": {
+   "precision": 0.8,
+   "recall": 0.6666666666666666,
+   "f1-score": 0.7272727272727273,
+   "support": 6.0
+  },
+  "防水-防水施作": {
+   "precision": 0.8,
+   "recall": 0.6666666666666666,
+   "f1-score": 0.7272727272727273,
+   "support": 6.0
+  },
+  "雜項-清潔": {
+   "precision": 0.6666666666666666,
+   "recall": 0.3333333333333333,
+   "f1-score": 0.4444444444444444,
+   "support": 6.0
+  }
+ },
+ "coverageCurve": [
+  {
+   "threshold": 0.0,
+   "coverage": 1.0,
+   "accuracyOnCovered": 0.847,
+   "n": 118
+  },
+  {
+   "threshold": 0.2,
+   "coverage": 1.0,
+   "accuracyOnCovered": 0.847,
+   "n": 118
+  },
+  {
+   "threshold": 0.3,
+   "coverage": 1.0,
+   "accuracyOnCovered": 0.847,
+   "n": 118
+  },
+  {
+   "threshold": 0.4,
+   "coverage": 0.983,
+   "accuracyOnCovered": 0.862,
+   "n": 116
+  },
+  {
+   "threshold": 0.5,
+   "coverage": 0.941,
+   "accuracyOnCovered": 0.883,
+   "n": 111
+  },
+  {
+   "threshold": 0.6,
+   "coverage": 0.856,
+   "accuracyOnCovered": 0.911,
+   "n": 101
+  },
+  {
+   "threshold": 0.7,
+   "coverage": 0.814,
+   "accuracyOnCovered": 0.927,
+   "n": 96
+  },
+  {
+   "threshold": 0.8,
+   "coverage": 0.72,
+   "accuracyOnCovered": 0.953,
+   "n": 85
+  },
+  {
+   "threshold": 0.9,
+   "coverage": 0.585,
+   "accuracyOnCovered": 0.957,
+   "n": 69
+  }
+ ],
+ "geminiBaseline": {
+  "support": 113,
+  "coverage": 0.958,
+  "top1": 0.779,
+  "distinctRawStrings": 72,
+  "note": "僅涵蓋有 anno.workItem 的子集，非全測試集",
+  "localTop1SameSubset": 0.867
+ }
+}

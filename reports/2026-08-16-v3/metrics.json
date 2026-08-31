@@ -1,0 +1,81 @@
+{
+ "top1": 0.7822,
+ "macroF1": 0.6505,
+ "support": 101,
+ "perClass": {
+  "其他": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1-score": 0.0,
+   "support": 4.0
+  },
+  "基礎": {
+   "precision": 0.6666666666666666,
+   "recall": 1.0,
+   "f1-score": 0.8,
+   "support": 4.0
+  },
+  "景觀": {
+   "precision": 1.0,
+   "recall": 0.5,
+   "f1-score": 0.6666666666666666,
+   "support": 2.0
+  },
+  "木作": {
+   "precision": 1.0,
+   "recall": 1.0,
+   "f1-score": 1.0,
+   "support": 8.0
+  },
+  "油漆批土": {
+   "precision": 0.9411764705882353,
+   "recall": 0.8421052631578947,
+   "f1-score": 0.8888888888888888,
+   "support": 19.0
+  },
+  "泥作": {
+   "precision": 1.0,
+   "recall": 0.7083333333333334,
+   "f1-score": 0.8292682926829268,
+   "support": 24.0
+  },
+  "清潔": {
+   "precision": 0.0,
+   "recall": 0.0,
+   "f1-score": 0.0,
+   "support": 4.0
+  },
+  "磁磚_地": {
+   "precision": 0.9375,
+   "recall": 0.9375,
+   "f1-score": 0.9375,
+   "support": 16.0
+  },
+  "磁磚_牆": {
+   "precision": 0.8,
+   "recall": 1.0,
+   "f1-score": 0.8888888888888888,
+   "support": 8.0
+  },
+  "輕隔間": {
+   "precision": 0.45454545454545453,
+   "recall": 0.8333333333333334,
+   "f1-score": 0.5882352941176471,
+   "support": 6.0
+  },
+  "防水": {
+   "precision": 0.4166666666666667,
+   "recall": 0.8333333333333334,
+   "f1-score": 0.5555555555555556,
+   "support": 6.0
+  }
+ },
+ "geminiBaseline": {
+  "support": 76,
+  "coverage": 0.752,
+  "top1": 0.816,
+  "distinctRawStrings": 43,
+  "note": "僅涵蓋有 anno.workItem 的子集，非全測試集",
+  "localTop1SameSubset": 0.789
+ }
+}

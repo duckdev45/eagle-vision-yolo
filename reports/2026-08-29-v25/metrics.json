@@ -1,0 +1,132 @@
+{
+ "top1": 0.8654,
+ "macroF1": 0.8187,
+ "macroF1Classes": 10,
+ "support": 104,
+ "perClass": {
+  "基礎-連續壁": {
+   "precision": 1.0,
+   "recall": 0.9,
+   "f1-score": 0.9473684210526315,
+   "support": 10.0
+  },
+  "木作-天花封板": {
+   "precision": 1.0,
+   "recall": 0.8333333333333334,
+   "f1-score": 0.9090909090909091,
+   "support": 12.0
+  },
+  "植栽-景觀": {
+   "precision": 0.8571428571428571,
+   "recall": 1.0,
+   "f1-score": 0.9230769230769231,
+   "support": 6.0
+  },
+  "油漆-批土塗裝": {
+   "precision": 0.9545454545454546,
+   "recall": 0.875,
+   "f1-score": 0.9130434782608695,
+   "support": 24.0
+  },
+  "泥作-地磚貼飾": {
+   "precision": 0.8,
+   "recall": 1.0,
+   "f1-score": 0.8888888888888888,
+   "support": 12.0
+  },
+  "泥作-壁磚貼飾": {
+   "precision": 1.0,
+   "recall": 0.8571428571428571,
+   "f1-score": 0.9230769230769231,
+   "support": 14.0
+  },
+  "泥作-打底粉光": {
+   "precision": 0.7777777777777778,
+   "recall": 0.7777777777777778,
+   "f1-score": 0.7777777777777778,
+   "support": 18.0
+  },
+  "設備-電梯": {
+   "precision": 0.6,
+   "recall": 0.75,
+   "f1-score": 0.6666666666666666,
+   "support": 4.0
+  },
+  "輕隔間": {
+   "precision": 0.4,
+   "recall": 1.0,
+   "f1-score": 0.5714285714285714,
+   "support": 2.0
+  },
+  "金屬-欄杆鐵件": {
+   "precision": 1.0,
+   "recall": 0.5,
+   "f1-score": 0.6666666666666666,
+   "support": 2.0
+  }
+ },
+ "coverageCurve": [
+  {
+   "threshold": 0.0,
+   "coverage": 1.0,
+   "accuracyOnCovered": 0.865,
+   "n": 104
+  },
+  {
+   "threshold": 0.2,
+   "coverage": 1.0,
+   "accuracyOnCovered": 0.865,
+   "n": 104
+  },
+  {
+   "threshold": 0.3,
+   "coverage": 1.0,
+   "accuracyOnCovered": 0.865,
+   "n": 104
+  },
+  {
+   "threshold": 0.4,
+   "coverage": 0.981,
+   "accuracyOnCovered": 0.863,
+   "n": 102
+  },
+  {
+   "threshold": 0.5,
+   "coverage": 0.962,
+   "accuracyOnCovered": 0.87,
+   "n": 100
+  },
+  {
+   "threshold": 0.6,
+   "coverage": 0.913,
+   "accuracyOnCovered": 0.905,
+   "n": 95
+  },
+  {
+   "threshold": 0.7,
+   "coverage": 0.885,
+   "accuracyOnCovered": 0.913,
+   "n": 92
+  },
+  {
+   "threshold": 0.8,
+   "coverage": 0.75,
+   "accuracyOnCovered": 0.936,
+   "n": 78
+  },
+  {
+   "threshold": 0.9,
+   "coverage": 0.596,
+   "accuracyOnCovered": 0.968,
+   "n": 62
+  }
+ ],
+ "geminiBaseline": {
+  "support": 101,
+  "coverage": 0.971,
+  "top1": 0.723,
+  "distinctRawStrings": 57,
+  "note": "僅涵蓋有 anno.workItem 的子集，非全測試集",
+  "localTop1SameSubset": 0.871
+ }
+}

@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工項辨識 — 訓練路線與三者共存</title>
+<style>
+  :root{
+    color-scheme:light;
+    --plane:#f9f9f7; --surface:#fcfcfb;
+    --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+    --now:#2a78d6;        /* 現在線上 */
+    --brain:#1baf7a;      /* 技術線 */
+    --chip:rgba(11,11,11,.05);
+    --nowdim:rgba(42,120,214,.07);
+    --braindim:rgba(27,175,122,.09);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:where(:not([data-theme="light"])){
+      color-scheme:dark;
+      --plane:#0d0d0d; --surface:#1a1a19;
+      --ink:#fff; --ink2:#c3c2b7; --muted:#898781;
+      --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.12);
+      --now:#3987e5; --brain:#199e70;
+      --chip:rgba(255,255,255,.07);
+      --nowdim:rgba(57,135,229,.11);
+      --braindim:rgba(25,158,112,.13);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --plane:#0d0d0d; --surface:#1a1a19;
+    --ink:#fff; --ink2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.12);
+    --now:#3987e5; --brain:#199e70;
+    --chip:rgba(255,255,255,.07);
+    --nowdim:rgba(57,135,229,.11);
+    --braindim:rgba(25,158,112,.13);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--plane);color:var(--ink);
+    font-family:"Plus Jakarta Sans","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+    font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .page{max-width:1000px;margin:0 auto;padding:40px 26px 70px}
+
+  header{margin-bottom:14px}
+  h1{font-size:27px;margin:0 0 6px;letter-spacing:-.01em;font-weight:700}
+  .sub{color:var(--ink2);font-size:15px;margin:0}
+
+  .legend{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:18px 0 26px;
+    padding:11px 15px;background:var(--surface);border:1px solid var(--ring);border-radius:10px;
+    font-size:13.5px;color:var(--ink2)}
+  .lg{display:flex;align-items:center;gap:7px}
+  .sw{width:13px;height:13px;border-radius:3px;flex:none}
+  .sw.n{background:var(--now)} .sw.b{background:var(--brain)}
+  .sw.f{background:transparent;border:1.5px dashed var(--axis)}
+
+  /* zone */
+  .zone{background:var(--surface);border:1px solid var(--ring);border-radius:14px;
+    padding:20px 22px 22px;margin-bottom:0;position:relative}
+  .zone.now{background:var(--nowdim);border-color:color-mix(in oklab,var(--now) 28%,transparent)}
+  .zone.brain{background:var(--braindim);border-color:color-mix(in oklab,var(--brain) 30%,transparent)}
+  .zone.future{border-style:dashed;border-color:var(--axis)}
+  .z-head{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:4px}
+  .z-n{font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.06em}
+  .z-t{font-size:19px;font-weight:700;letter-spacing:-.005em}
+  .z-badge{font-size:11.5px;font-weight:700;padding:2.5px 9px;border-radius:999px;white-space:nowrap}
+  .z-badge.live{background:color-mix(in oklab,var(--now) 16%,transparent);color:var(--now)}
+  .z-badge.tech{background:color-mix(in oklab,var(--brain) 18%,transparent);color:var(--brain)}
+  .z-badge.soon{background:var(--chip);color:var(--muted)}
+  .z-sub{font-size:14px;color:var(--ink2);margin:0 0 18px}
+
+  /* flow row */
+  .row{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+  .box{background:var(--surface);border:1px solid var(--ring);border-radius:10px;
+    padding:13px 15px;flex:1 1 0;min-width:148px;display:flex;flex-direction:column;justify-content:center}
+  .box.hi{border-width:2px;border-color:var(--brain)}
+  .box.hin{border-width:2px;border-color:var(--now)}
+  .b-t{font-size:15px;font-weight:700;line-height:1.35}
+  .b-d{font-size:12.5px;color:var(--ink2);margin-top:5px;line-height:1.5}
+  .b-n{font-size:12.5px;color:var(--muted);margin-top:5px;font-variant-numeric:tabular-nums}
+  .arrow{flex:0 0 34px;display:flex;align-items:center;justify-content:center;
+    font-size:20px;color:var(--axis);font-weight:700}
+  .arrow.sm{flex-basis:26px;font-size:16px}
+  @media (max-width:760px){
+    .row{flex-direction:column}
+    .arrow{flex-basis:auto;height:26px;transform:rotate(90deg)}
+  }
+
+  .between{display:flex;justify-content:center;align-items:center;height:34px;color:var(--axis);
+    font-size:22px;font-weight:700}
+  .between span{font-size:12.5px;color:var(--muted);font-weight:600;margin-left:9px}
+
+  .side{margin-top:14px;display:flex;gap:10px;align-items:flex-start;
+    background:var(--surface);border:1px solid var(--ring);border-radius:9px;padding:11px 14px;
+    font-size:13px;color:var(--ink2)}
+  .side b{color:var(--ink)}
+  .side .k{flex:none;font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em;
+    padding-top:1px}
+
+  .tech{margin-top:16px;padding:13px 15px;border-radius:9px;
+    background:var(--surface);border:1px dashed color-mix(in oklab,var(--brain) 45%,transparent)}
+  .tech-h{font-size:12px;font-weight:700;color:var(--brain);letter-spacing:.07em;margin-bottom:8px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:12px;
+    background:var(--chip);border:1px solid var(--ring);border-radius:6px;padding:3px 9px;color:var(--ink2)}
+  .tech-n{font-size:12.5px;color:var(--muted);margin-top:9px;line-height:1.55}
+
+  .three{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:4px}
+  @media (max-width:760px){.three{grid-template-columns:1fr}}
+  .role{background:var(--surface);border:1px solid var(--ring);border-radius:11px;padding:15px 16px}
+  .role .rt{font-size:15.5px;font-weight:700;margin-bottom:3px}
+  .role .rr{font-size:12px;font-weight:700;letter-spacing:.05em;margin-bottom:8px}
+  .role .rd{font-size:13px;color:var(--ink2);line-height:1.55}
+  .r-truth .rr{color:var(--muted)}
+  .r-now .rr{color:var(--now)}
+  .r-brain .rr{color:var(--brain)}
+  .r-now{border-color:color-mix(in oklab,var(--now) 35%,transparent)}
+  .r-brain{border-color:color-mix(in oklab,var(--brain) 38%,transparent)}
+
+  .fork{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}
+  .fork .f{flex:1 1 0;min-width:210px;background:var(--surface);border:1px solid var(--ring);
+    border-radius:10px;padding:13px 15px}
+  .fork .fq{font-size:12.5px;color:var(--muted);font-weight:700;margin-bottom:4px}
+  .fork .fa{font-size:14.5px;font-weight:700}
+  .fork .fd{font-size:12.5px;color:var(--ink2);margin-top:4px}
+
+  footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--grid);
+    font-size:12.5px;color:var(--muted);line-height:1.7}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>工項辨識：現在怎麼跑，我們在訓練什麼</h1>
+  <p class="sub">一張圖看完。灰色小字是技術細節，可以跳過。</p>
+</header>
+
+<div class="legend">
+  <div class="lg"><span class="sw n"></span>藍＝現在線上已經在跑</div>
+  <div class="lg"><span class="sw b"></span>綠＝我們在訓練的「大腦」（技術線）</div>
+  <div class="lg"><span class="sw f"></span>虛線＝還沒做，計畫中</div>
+</div>
+
+<!-- ① -->
+<div class="zone now">
+  <div class="z-head">
+    <span class="z-n">①</span><span class="z-t">現在：現場一張照片怎麼變成日報</span>
+    <span class="z-badge live">已上線</span>
+  </div>
+  <p class="z-sub">這一段今天就在運作，不需要改。</p>
+  <div class="row">
+    <div class="box"><div class="b-t">工地拍照</div><div class="b-n">已累積 548 張</div></div>
+    <div class="arrow">→</div>
+    <div class="box hin"><div class="b-t">Gemini 看照片<br>自動猜工項</div><div class="b-d">幫工人省下打字</div><div class="b-n">覆蓋 75% ｜ 準確 81%</div></div>
+    <div class="arrow">→</div>
+    <div class="box"><div class="b-t">工人確認或改寫<br>工項標題</div><div class="b-d">人說的算</div></div>
+    <div class="arrow">→</div>
+    <div class="box"><div class="b-t">日報存檔</div><div class="b-d">照片 + 標題一起留下</div></div>
+  </div>
+  <div class="side"><span class="k">觀察</span><div>Gemini 答錯時，多半不是看錯畫面，是<b>看到照片裡的另一件事</b>（照片是木作天花板，它答門框安裝）。一張照片只能填一個工項，這種錯本質上避不掉。</div></div>
+</div>
+
+<div class="between">↓<span>日報存下來的「照片＋標題」，就是我們的教材</span></div>
+
+<!-- ② -->
+<div class="zone">
+  <div class="z-head">
+    <span class="z-n">②</span><span class="z-t">把現場資料變成「標準答案卷」</span>
+    <span class="z-badge soon">進行中</span>
+  </div>
+  <p class="z-sub">大腦要學，必須先有一份「這張照片是什麼工種」的正確答案。這一段是整件事最花人力、也最決定成敗的地方。</p>
+  <div class="row">
+    <div class="box"><div class="b-t">工人手寫的<br>工項標題</div><div class="b-d">例：「3F 廁所地磚貼飾」</div></div>
+    <div class="arrow">→</div>
+    <div class="box"><div class="b-t">對照表<br>整理成統一分類</div><div class="b-d">依公司的工程分類樹</div></div>
+    <div class="arrow">→</div>
+    <div class="box hi"><div class="b-t">標準答案卷</div><div class="b-d">10 種工種</div><div class="b-n">441 張可用</div></div>
+  </div>
+  <div class="side"><span class="k">品質把關</span><div>拿產品裡「工人從規範庫勾選」的 112 張當第二份答案交叉比對，<b>已經抓到 6 張標錯</b>（「鋼筋加工場場地整理」被歸成清潔）。這種錯不修，大腦就是被教錯。</div></div>
+</div>
+
+<div class="between">↓</div>
+
+<!-- ③ -->
+<div class="zone brain">
+  <div class="z-head">
+    <span class="z-n">③</span><span class="z-t">訓練大腦</span>
+    <span class="z-badge tech">技術線</span>
+  </div>
+  <p class="z-sub">這一段是「底層技術」所在。左到右就是一次訓練的完整流程，目前全部跑得起來。</p>
+  <div class="row">
+    <div class="box"><div class="b-t">遮蔽<br>去識別</div><div class="b-d">把照片上的文字浮水印蓋掉，不然大腦會偷看答案</div></div>
+    <div class="arrow sm">→</div>
+    <div class="box"><div class="b-t">切考卷</div><div class="b-d">同工地同一天的照片不可以同時出現在課本和考卷</div></div>
+    <div class="arrow sm">→</div>
+    <div class="box hi"><div class="b-t">影像編碼器<br>「看圖的眼睛」</div><div class="b-d">把照片轉成電腦能比較的數字</div></div>
+    <div class="arrow sm">→</div>
+    <div class="box hi"><div class="b-t">分類器<br>「判斷的那一層」</div><div class="b-d">數字 → 十種工種之一</div></div>
+    <div class="arrow sm">→</div>
+    <div class="box"><div class="b-t">考試 + 報告</div><div class="b-d">每次實驗存檔，可回頭比較</div></div>
+  </div>
+
+  <div class="tech">
+    <div class="tech-h">技術線（底層用什麼）</div>
+    <div class="chips">
+      <span class="chip">SigLIP ViT-B/16 — 凍結編碼器</span>
+      <span class="chip">ConvNeXt-Tiny — 可微調編碼器</span>
+      <span class="chip">Logistic Regression — 線性探針</span>
+      <span class="chip">兩階段微調 pre-train → fine-tune</span>
+      <span class="chip">分組交叉驗證 grouped CV</span>
+      <span class="chip">ONNX — 上線用格式，單張 19ms</span>
+    </div>
+    <div class="tech-n">
+      <b>白話</b>：「眼睛」用現成的大型視覺模型（不自己從零訓練，資料量差好幾個數量級）；我們只訓練最後「判斷的那一層」。
+      成本低、速度快，而且分不開的時候通常是<b>答案卷有矛盾</b>，不是模型不夠大——所以它同時是診斷工具。
+    </div>
+  </div>
+
+  <div class="three" style="margin-top:16px">
+    <div class="role r-brain"><div class="rr">目前成績</div><div class="rt">10 種工種</div><div class="rd">同一批照片上：本地大腦 <b>85%</b> ／ Gemini <b>81%</b>。但測試卷只有 99 張，這 4 個百分點在誤差範圍內，<b>還不能說贏</b>。</div></div>
+    <div class="role r-brain"><div class="rr">為什麼值得做</div><div class="rt">快、便宜、可離線</div><div class="rd">單張判斷 <b>19 毫秒</b>，跑在自己的機器上，<b>不需要按張付費、不需要連外網</b>。工地網路不穩也能用。</div></div>
+    <div class="role r-truth"><div class="rr">還缺什麼</div><div class="rt">一份正式考卷</div><div class="rd">現在的 99 張太少，誤差 ±8 個百分點；而且每次調整分類規則，考卷本身也跟著變。需要 300–500 張人工標定、之後不再變動的考卷。</div></div>
+  </div>
+</div>
+
+<div class="between">↓</div>
+
+<!-- ④ -->
+<div class="zone future">
+  <div class="z-head">
+    <span class="z-n">④</span><span class="z-t">上線後：三者共存，不是誰取代誰</span>
+    <span class="z-badge soon">計畫中</span>
+  </div>
+  <p class="z-sub">三個角色各有各的位置。</p>
+
+  <div class="three">
+    <div class="role r-truth"><div class="rr">最終真相</div><div class="rt">工人手寫的標題</div><div class="rd">人說的算。它同時是產品的正式紀錄，也是訓練大腦的答案來源。<b>人每改一次，就是一筆免費的新教材。</b></div></div>
+    <div class="role r-now"><div class="rr">現在的主力</div><div class="rt">Gemini LLM</div><div class="rd">什麼都能猜、會講自由文字、不受十種工種限制。但一張要花錢、要連網、有延遲。</div></div>
+    <div class="role r-brain"><div class="rr">未來的第一道</div><div class="rt">本地大腦</div><div class="rd">快、便宜、可離線，但只認十種工種，遇到沒學過的一定硬猜。<b>所以不能單獨上線。</b></div></div>
+  </div>
+
+  <div class="side" style="margin-top:16px"><span class="k">怎麼串</span><div>照片進來 <b>先問本地大腦</b>，它會同時回報「我有多少信心」——</div></div>
+  <div class="fork">
+    <div class="f" style="border-color:color-mix(in oklab,var(--brain) 40%,transparent)">
+      <div class="fq">信心夠高</div><div class="fa">直接用本地大腦的答案</div>
+      <div class="fd">預估可涵蓋大多數照片 → 省下大部分 Gemini 費用與等待時間</div></div>
+    <div class="f" style="border-color:color-mix(in oklab,var(--now) 40%,transparent)">
+      <div class="fq">信心不足</div><div class="fa">交給 Gemini</div>
+      <div class="fd">沒學過的工種、少見的畫面，交給什麼都能猜的那一個</div></div>
+  </div>
+  <div class="side"><span class="k">安全閥</span><div>門檻是一個可調的數字。<b>調到最高就等於完全回到今天純 Gemini 的狀態</b>——回退不需要重新開發，改一個設定即可。</div></div>
+  <div class="side"><span class="k">會自己變強</span><div>工人每次修正工項，就回流成 ② 的新教材 → 重新訓練 → 大腦變準 → 門檻可以再放寬 → Gemini 用量再降。這是一個閉環。</div></div>
+</div>
+
+<footer>
+  eagle-vision · 2026-08-17 · 數字皆為目前實測值<br>
+  一句話總結：<b>現在 Gemini 在跑、人的標題是答案；我們用這兩者累積的資料訓練一顆便宜快速的本地大腦，未來讓它擋掉大部分簡單案例，難的還是交給 Gemini。</b>
+</footer>
+
+</div>
+</body>
+</html>
