@@ -1,6 +1,0 @@
-{
- "labelsVersion": 5,
- "split": "v18",
- "encoder": "siglip",
- "model": "probe-siglip-v18.pkl"
-}

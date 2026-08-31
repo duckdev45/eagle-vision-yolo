@@ -1,6 +1,0 @@
-{
- "labelsVersion": 3,
- "split": "mix-v1",
- "encoder": "siglip",
- "model": "probe-siglip-mix-v1.pkl"
-}

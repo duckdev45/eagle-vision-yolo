@@ -1,6 +1,0 @@
-{
- "labelsVersion": 3,
- "split": "qms-v1",
- "encoder": "siglip",
- "model": "probe-siglip-qms-v1.pkl"
-}
