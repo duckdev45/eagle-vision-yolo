@@ -422,6 +422,9 @@ def test_boxes_roundtrip_and_last_write_wins(tmp_path, monkeypatch):
 
 def test_crops_never_leak_from_test_photos(tmp_path, monkeypatch):
     """裁切塊只進 train。母張若在測試集，它的裁切塊等於把答案偷渡到訓練側。"""
+    import pytest
+    if not os.path.isdir(os.path.join(os.path.dirname(__file__), "..", "data", "raw", "photos")):
+        pytest.skip("data/ 不在（本機執行期資料，不入 git）")
     import labels
     import split as sp_mod
 
