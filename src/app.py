@@ -14,6 +14,10 @@
     qms_page.py      QMS 四分頁
     standards_page.py 規範庫五分頁
 
+分頁導航用 nav()（radio）不用 st.tabs：st.tabs 的選取是純前端狀態，元件樹一變
+（例如標框畫布出現）就重置回第一頁——標一次框就被彈走一次。radio 的值存在
+session_state，任何 rerun 都不會掉。
+
     uv run streamlit run src/app.py
 """
 from __future__ import annotations
@@ -25,7 +29,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from ui.common import inject_css  # noqa: E402
+from ui.common import inject_css, nav  # noqa: E402
 from ui.pms_page import pms_page  # noqa: E402
 from ui.qms_page import qms_page  # noqa: E402
 from ui.standards_page import standards_page  # noqa: E402
@@ -39,16 +43,10 @@ SYSTEM = st.segmented_control(
     label_visibility="collapsed")
 
 if SYSTEM == "QMS 稽核":
-    with st.container():
-        qms_tabs = st.tabs(["① 同步", "② 分佈", "③ 照片", "④ 報告", "⑤ 模型"])
-        qms_page(qms_tabs)
+    qms_page(nav(["① 同步", "② 資料總覽", "③ 照片", "④ 報告"], key="qms_nav"))
 elif SYSTEM == "規範庫":
-    with st.container():
-        std_tabs = st.tabs(["① QS 標準", "② 合約工作約定", "③ 衝突比對",
-                            "④ 工種介面", "⑤ 合約相依缺口"])
-        standards_page(std_tabs)
+    standards_page(nav(["① QS 標準", "② 合約工作約定", "③ 衝突比對",
+                        "④ 工種介面", "⑤ 合約相依缺口"], key="std_nav"))
 else:
-    with st.container():
-        pms_tabs = st.tabs(["① 同步", "② 分佈", "③ 照片", "④ 複核佇列",
-                            "⑤ 歷史資料", "⑥ 標籤規則", "⑦ 報告"])
-        pms_page(pms_tabs)
+    pms_page(nav(["① 同步", "② 資料總覽", "③ 照片", "④ 複核佇列",
+                  "⑤ 歷史資料", "⑥ 標籤規則", "⑦ 報告"], key="pms_nav"))
