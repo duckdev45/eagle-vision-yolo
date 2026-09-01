@@ -50,9 +50,9 @@ UNSURE = "other"
 
 @dataclass
 class Clause:
-    project: str          已外移（與 QS 分開的主鍵軸）
+    project: str          # 所屬案（與 QS 分開的主鍵軸）
     trade: str            # 工種，如「泥作工程」
-    vendor: str           已外移
+    vendor: str           # 承包廠商
     doc_date: str         # 文件日期
     sheet: str            # 來源分頁，如「工約」
     no: str               # 條號，如「38」或「61(3)」
@@ -147,7 +147,7 @@ def tolerances(docs=None) -> list[Clause]:
 
 
 # ── QS 交叉引用（公司映射，不入 git）──────────────────────────────────
-已外移/廠商/介面配對是公司營運資訊，2026-09-01 起移到 reference/contract/mappings.yaml
+# 所屬案/廠商/介面配對是公司營運資訊，2026-09-01 起移到 reference/contract/mappings.yaml
 # （與 TSV 同進退）。這裡只留載入器；mappings 缺席時查詢回空、自檢跳過——
 # 裸 clone 的行為由 tests 的 skip 邏輯接管。
 def load_mappings() -> dict:
