@@ -632,3 +632,26 @@ def test_core_contract_service_loads_real_data():
     st_ = [d for d in docs if "鋼筋" in d.trade]
     assert st_ and st_[0].kind == "物明"          # 物明≠工明，這條判斷不能丟
     assert cd.answers_qs("QS0701-4.13"), "QS 交叉引用必須解析得到條款"
+
+
+def test_contract_cross_check_and_mappings_smoke():
+    """cross_check 走 mappings.yaml（2026-09-01 去識別化外移後曾因殘留引用炸過——
+    規範庫 ③ 衝突比對分頁在跑這條路徑，self-check 與 tests 當時都沒蓋到它）。"""
+    import pytest
+    if not os.path.isdir(os.path.join(os.path.dirname(__file__), "..", "reference", "contract", "raw")):
+        pytest.skip("reference/ 不在（公司資料不入 git）")
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+    from core import contractdata as cd
+
+    # 缺 mappings 的降級：查詢回空、不炸
+    rs = cd.cross_check()
+    assert isinstance(rs, list)
+    if cd.load_mappings().get("TRADE_TO_QS"):
+        assert len(rs) >= 1, "有映射時應產出衝突候選（本機實測 7 組）"
+        r0 = rs[0]
+        assert {"trade", "project", "qsDoc", "topic", "qs", "contract"} <= set(r0)
+    # answers_qs / interface_clauses 同一條映射鏈
+    assert cd.answers_qs("QS0701-4.13") or not cd.load_mappings().get("QS_ANSWERS")
+    names = [it["name"] for it in cd.load_mappings().get("INTERFACES", [])]
+    for n in names:
+        assert cd.interface_clauses(n), f"介面「{n}」應解析得到條款"

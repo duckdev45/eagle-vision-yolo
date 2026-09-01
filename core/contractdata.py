@@ -210,7 +210,7 @@ def cross_check(docs=None, qs_docs=None) -> list[dict]:
     tmap = load_mappings().get("TRADE_TO_QS", {})
     out = []
     for d in docs:
-        for qdoc_no in TRADE_TO_QS.get(d.trade, []):
+        for qdoc_no in tmap.get(d.trade, []):
             if qdoc_no not in qd:
                 continue
             for topic, pat in CONFLICT_TOPICS.items():
