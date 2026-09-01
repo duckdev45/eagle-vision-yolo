@@ -19,7 +19,7 @@ def qms_page(tabs):
 
     if tabs[0]:
         st.subheader("QMS 稽核照同步")
-        st.caption(f"來源 {os.getenv('QMS_API_BASE_URL', 'https://qms.example.invalid/api/qms')}"
+        st.caption(f"來源 {os.getenv('QMS_API_BASE_URL', '（未設 QMS_API_BASE_URL）')}"
                    f" · 正式環境，只讀 · 母體 36,653 張")
         c1, c2, c3 = st.columns(3)
         with c1:

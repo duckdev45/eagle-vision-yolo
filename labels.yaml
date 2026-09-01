@@ -23,8 +23,6 @@ exclude:
   # 開這個過濾會砍掉 56% 與四個類別，故暫時停用；資料量夠了再打開。
   createdBy: []
     # - c98f2ca6-3c18-4606-9171-99c6ff0ddfc3   # 11409001 許雅姿
-    # - cc6751d1-6f2f-41a0-a50c-81b08e287802   # 11501001 EMP-1 EMP1@example.invalid
-    # - 546184bf-8bfd-4bc3-97da-9b354d377616   # 11502001 EMP-2 EMP2@example.invalid
 
 # 直接排除（測試資料、無語意標題）
 junk:

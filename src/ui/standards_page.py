@@ -89,7 +89,7 @@ def standards_page(tabs) -> None:
         st.caption("QS 按**單一工種**編排，交界被切碎（實測 28 個介面項散在 9 份標準裡）。"
                    "合約是逐工種簽的，同一個交界會在兩份合約各出現一次——"
                    "**兩邊都拿到才是完整的**。")
-        for it in contractdata.INTERFACES:
+        for it in contractdata.load_mappings().get("INTERFACES", []):
             cs = contractdata.interface_clauses(it["name"])
             with st.expander(f"{it['name']}（{len(cs)} 條）"):
                 st.info(it["note"])
@@ -99,7 +99,7 @@ def standards_page(tabs) -> None:
     if tabs[4]:                                    # ⑤ 合約相依缺口
         docs = qsdata.load()
         ci = qsdata.contract_items(docs)
-        answered = contractdata.QS_ANSWERS
+        answered = contractdata.load_mappings().get("QS_ANSWERS", {})
         st.metric("合約相依項", f"{len(answered)} / {len(ci)}",
                   help="判定基準指向合約而非 QS 的檢查項，目前已對應到合約條款的比例")
         st.caption("這些項目**單靠 QS 答不出來**。RAG 若只灌 QS，"

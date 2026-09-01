@@ -9,7 +9,7 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
-BASE = "https://qms.example.invalid/api/qms"
+BASE = os.getenv("QMS_API_BASE_URL", "").rstrip("/")  # 由 .env 提供；見 .env.example
 TIMEOUT = 30
 
 RAW_DIR = Path(__file__).parent.parent / "reference" / "iso" / "raw"
@@ -175,7 +175,7 @@ def main(emp_id: str, password: str, output_dir: Path | None = None):
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("用法: python fetch_iso_checklist.py <emp_id> <password>")
-        print("例: python fetch_iso_checklist.py 11409001 USER-001")
+        print("例: python fetch_iso_checklist.py 11409001 <EMP_ID>")
         sys.exit(1)
 
     emp_id = sys.argv[1]

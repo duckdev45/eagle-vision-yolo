@@ -27,7 +27,7 @@ import paths  # noqa: E402
 
 load_dotenv()
 
-BASE = (os.getenv("QMS_API_BASE_URL") or "https://qms.example.invalid/api/qms").rstrip("/")
+BASE = (os.getenv("QMS_API_BASE_URL") or "").rstrip("/")  # 由 .env 提供
 MODULE = "CONSTRUCTION"
 PATH_CATEGORY = "qms/inspection"
 TIMEOUT = httpx.Timeout(30.0, read=180.0)

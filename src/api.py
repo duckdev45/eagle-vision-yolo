@@ -1,6 +1,6 @@
 """PMS REST client。
 
-契約來源與前端 orval 同一份：https://pms.example.invalid/api-docs-json
+契約來源與前端 orval 同一份（URL 在 .env：API_BASE_URL）
 所有回應皆為 { code, msg, data } 信封，unwrap 後才回傳。
 
 2026-08-25 起預設指向正式版。dev 是 prod 的複本，**dailyReportInfoId 與 fileId
@@ -19,12 +19,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE = os.getenv("API_BASE_URL", "https://pms.example.invalid/").rstrip("/")
+BASE = os.getenv("API_BASE_URL", "").rstrip("/")  # 由 .env 提供；見 .env.example
 TIMEOUT = httpx.Timeout(30.0, read=120.0)
 
 
 def host() -> str:
-    """`pms.example.invalid` / `pms-dev.example.invalid`。manifest 用它標照片是哪台來的。"""
+    """API 主機名。manifest 用它標照片是哪台來的（換主機不等於照片消失）。"""
     return BASE.split("://", 1)[-1].split("/", 1)[0]
 
 

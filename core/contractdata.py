@@ -34,6 +34,7 @@ from pathlib import Path  # noqa: E402
 import paths  # noqa: E402
 
 RAW_DIR = paths.ROOT / "reference" / "contract" / "raw"
+MAPPINGS = paths.ROOT / "reference" / "contract" / "mappings.yaml"
 
 # 條款分類（決定該進哪個子系統）——順序即優先權
 KINDS: list[tuple[str, str, str]] = [
@@ -49,10 +50,10 @@ UNSURE = "other"
 
 @dataclass
 class Clause:
-    project: str          已外移，如「SITE-Z」
+    project: str          已外移（與 QS 分開的主鍵軸）
     trade: str            # 工種，如「泥作工程」
-    vendor: str           已外移，如「VENDOR-A」
-    doc_date: str         # 民國日期，如「113.03.07」
+    vendor: str           已外移
+    doc_date: str         # 文件日期
     sheet: str            # 來源分頁，如「工約」
     no: str               # 條號，如「38」或「61(3)」
     text: str
@@ -145,91 +146,42 @@ def tolerances(docs=None) -> list[Clause]:
     return by_kind("tolerance", docs)
 
 
-# ── QS 交叉引用 ────────────────────────────────────────────────────────
-# qsdata.contract_items() 的合約相依項，判定基準指向合約。這裡標明哪幾條回答了它們。
-# 只列**已驗證**的對應，沒把握的不寫——寧可留白也不要假裝答得出來。
-QS_ANSWERS: dict[str, list[str]] = {
-    # QS0501 油漆
-    "QS0501-4.1": ["SITE-D/油漆工程/2"],      # 材料進場是否依合約規範查驗
-    "QS0501-7": ["SITE-D/油漆工程/10",         # 漆料顏色是否正確、品牌是否符合合約
-                 "SITE-D/油漆工程/2"],
-    # QS0512 輕質灌漿牆
-    "QS0512-8": ["SITE-Z/輕質灌漿牆/3",      # 鍍鋅骨架安裝是否正確、依合約補強鋼板
-                 "SITE-Z/輕質灌漿牆/6"],
-    # QS0701 防水——標準自己寫「依合約規定」，答案在工約與施工剖面圖裡
-    "QS0701-4.9": ["SITE-Z/防水工程/D12",    # 取樣測厚度是否依合約規定
-                   "SITE-Z/防水工程/15"],
-    "QS0701-4.13": ["SITE-Z/防水工程/1"],    # 完工款須附合約規定年限之保固書
-}
+# ── QS 交叉引用（公司映射，不入 git）──────────────────────────────────
+已外移/廠商/介面配對是公司營運資訊，2026-09-01 起移到 reference/contract/mappings.yaml
+# （與 TSV 同進退）。這裡只留載入器；mappings 缺席時查詢回空、自檢跳過——
+# 裸 clone 的行為由 tests 的 skip 邏輯接管。
+def load_mappings() -> dict:
+    """QS_ANSWERS / TRADE_TO_QS / INTERFACES 三張映射表。缺檔回空 dict。"""
+    if not MAPPINGS.exists():
+        return {"QS_ANSWERS": {}, "TRADE_TO_QS": {}, "INTERFACES": []}
+    import yaml
+    return yaml.safe_load(MAPPINGS.read_text(encoding="utf-8")) or {}
 
 
 def answers_qs(qs_key: str) -> list[Clause]:
     """給一個 QS 檢查項代碼，回傳能回答它的合約條款。"""
-    keys = QS_ANSWERS.get(qs_key, [])
+    keys = load_mappings().get("QS_ANSWERS", {}).get(qs_key, [])
     if not keys:
         return []
     idx = {c.key: c for c in all_clauses()}
     return [idx[k] for k in keys if k in idx]
 
 
-# ── 合約工種 → QS docNo 對照（人工核對，非自動推論）────────────────────
+# ── 合約工種→QS 對照與介面條款：資料面在 mappings.yaml（不入 git）────────
 # 交叉比對只在**同工種**內做才有意義。跨工種比會出現「鷹架壁拉桿間距」
 # 配「灌漿牆自攻螺絲間距」這種誤配——都是「間距」，但毫無關係。
-TRADE_TO_QS: dict[str, list[str]] = {
-    "泥作工程": ["QS0401", "QS0402", "QS0403", "QS0404", "QS0405"],
-    "輕質灌漿牆": ["QS0512"],
-    "油漆工程": ["QS0501"],
-    "防水工程": ["QS0701", "QS0702", "QS0704"],
-    "1F大廳木作裝修": ["QS0503", "QS0507", "QS0511"],
-    "鋼筋材料": [],          # 物明（材料供應），非施工工約 → 不對應施工標準
-}
-
-# ── 介面條款：同案兩個工種講同一個交界 ────────────────────────────────
-# QS 按單一工種編排，介面被切碎散落（實測 28 個介面項散在 9 份標準裡）。
-# 合約是逐工種簽的，所以同一個交界會在兩份合約各出現一次——**兩邊都拿到才是完整的**。
-# 這裡只列已人工核對過的配對，不做自動推論。
-INTERFACES: list[dict] = [
-    {
-        "name": "浴室門檻：貼磚 vs 二次防水",
-        "clauses": ["SITE-Z/防水工程/D8", "SITE-Z/泥作工程/47"],
-        "note": "防水方寫「須待第二階段防水施工及試水完成後始可續貼磚」——"
-                "這是硬性順序閘門，泥作方的工約沒寫這條。"
-                "只看泥作合約會不知道要等防水。",
-    },
-    {
-        "name": "露台/陽台：壁磚預留高度 vs 泛水高度",
-        "clauses": ["SITE-Z/泥作工程/42", "SITE-Z/防水工程/4(f)",
-                    "SITE-Z/防水工程/2(b)"],
-        "note": "泥作預留下部 60cm 方舖貼；防水的陽台泛水高度配合落地窗墩、"
-                "纖維網轉角各貼 30cm。兩個數字必須對得起來，"
-                "但分別寫在兩份合約裡，沒人負責核對。",
-    },
-    {
-        "name": "窗框：塞水路 vs 防水塗佈範圍",
-        "clauses": ["SITE-Z/泥作工程/45", "SITE-Z/防水工程/D6"],
-        "note": "泥作留寬1cm深0.5cm木壓條供「甲方協力廠商作塞水路」——"
-                "那個協力廠商就是防水方；防水方寫窗框周邊塗佈 50cm、"
-                "下緣45度斜角 30cm×80cm。這是同一個動作的兩份描述。",
-    },
-    {
-        "name": "1F/屋頂交角填角",
-        "clauses": ["SITE-Z/泥作工程/41", "SITE-Z/防水工程/12",
-                    "SITE-Z/防水工程/D2"],
-        "note": "泥作作 5cm×5cm 填角「配合防水工程」；防水方要求各轉角施作補強層、"
-                "端角用 PRD-707+1:2 水泥砂漿作斜角。填角是泥作做的、補強層是防水做的，"
-                "疊在同一個位置。",
-    },
-]
+# 介面（同案兩個工種講同一個交界）也是公司配對資料，一併外移。
 
 
 def interface_clauses(name: str, docs=None) -> list[Clause]:
-    """取某個介面涉及的所有條款（跨工種）。"""
+    """取某個介面涉及的所有條款（跨工種）。mappings 缺席時回空。"""
     docs = docs or load()
     idx = {c.key: c for c in all_clauses(docs)}
-    for it in INTERFACES:
-        if it["name"] == name:
-            return [idx[k] for k in it["clauses"] if k in idx]
+    for it in load_mappings().get("INTERFACES", []):
+        if it.get("name") == name:
+            return [idx[k] for k in it.get("clauses", []) if k in idx]
     return []
+
 
 # 比對主題：兩邊講同一件事才比得下去
 CONFLICT_TOPICS: dict[str, str] = {
@@ -255,6 +207,7 @@ def cross_check(docs=None, qs_docs=None) -> list[dict]:
 
     docs = docs or load()
     qd = qs_docs or qs_data.load()
+    tmap = load_mappings().get("TRADE_TO_QS", {})
     out = []
     for d in docs:
         for qdoc_no in TRADE_TO_QS.get(d.trade, []):
@@ -307,10 +260,11 @@ def report(docs=None, log=print) -> None:
     for c in tolerances(docs)[:8]:
         log(f"  {c.key:<28} {c.text[:52]}")
 
+    qa = load_mappings().get("QS_ANSWERS", {})
     log("\n── QS 交叉引用（合約相依項，已對應幾項）──")
-    log(f"  已對應 {len(QS_ANSWERS)} 項")
-    for qk in sorted(QS_ANSWERS):
-        log(f"  {qk:<14} ← {'、'.join(QS_ANSWERS[qk])}")
+    log(f"  已對應 {len(qa)} 項")
+    for qk in sorted(qa):
+        log(f"  {qk:<14} ← {'、'.join(qa[qk])}")
 
 
 def self_check() -> int:
@@ -365,22 +319,25 @@ def self_check() -> int:
         ck(any("不同顏色" in c.text for c in wp[0].clauses),
            "防水 15「每度施工需使用不同顏色塗佈」——可用顏色判斷施作到第幾度")
 
+    ifs = load_mappings().get("INTERFACES", [])
+    qa = load_mappings().get("QS_ANSWERS", {})
+
     # 介面條款：跨工種配對必須解析得到
-    for it in INTERFACES:
+    for it in ifs:
         got = interface_clauses(it["name"], docs)
         ck(len(got) == len(it["clauses"]),
            f"介面「{it['name']}」解析得到 {len(got)}/{len(it['clauses'])} 條")
 
     # QS 交叉引用要指得到真實條款
-    for qk in QS_ANSWERS:
+    for qk in qa:
         got = answers_qs(qk)
-        ck(len(got) == len(QS_ANSWERS[qk]),
-           f"{qk} 的合約對應解析得到 {len(got)}/{len(QS_ANSWERS[qk])} 條")
+        ck(len(got) == len(qa[qk]),
+           f"{qk} 的合約對應解析得到 {len(got)}/{len(qa[qk])} 條")
 
     from core import qs_data
     n_ci = len(qs_data.contract_items(qs_data.load()))
-    warn_if(len(QS_ANSWERS) < n_ci,
-            f"qsdata 有 {n_ci} 項合約相依，目前只對應了 {len(QS_ANSWERS)} 項"
+    warn_if(len(qa) < n_ci,
+            f"qsdata 有 {n_ci} 項合約相依，目前只對應了 {len(qa)} 項"
             "——其餘待更多合約落地（尤其 QS0302-5 鋼筋綁紮，現有那份是材料供應非施工）")
 
     print(f"\n{'✓ 全部通過' if not bad else f'✗ {bad} 項失敗'}"

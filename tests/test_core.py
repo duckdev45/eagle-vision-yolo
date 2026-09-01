@@ -101,7 +101,7 @@ def test_class_names_follow_convention():
 def test_flatten():
     report = {
         "dailyReportInfoId": "r1", "constrId": "c1", "reportDate": "2026-08-01",
-        "status": "SUBMITTED", "stage": "F1_TO_TOPPING", "constr": {"name": "SITE-D"},
+        "status": "SUBMITTED", "stage": "F1_TO_TOPPING", "constr": {"name": "SITE-A"},
         "createdBy": "u1",
         "pages": [
             {"pageSort": 1, "contentKind": "WORK_ITEM", "content": {
@@ -127,7 +127,7 @@ def test_flatten():
     assert r["objectKey"] == "daily-report/f1.webp"     # 完整 pathCategory，不可寫死前綴
     assert r["predWorkItem"] == "地磚鋪貼工程" and r["natW"] == 400
     assert r["chipsOn"] == "平整度" and r["chipsCustom"] == "自填項"
-    assert r["constrName"] == "SITE-D" and r["createdBy"] == "u1"
+    assert r["constrName"] == "SITE-A" and r["createdBy"] == "u1"
     assert rows[1]["objectKey"] == "line-bot/media/f2.jpg"
     assert rows[1]["tradeName"] == "鋼筋工" and rows[1]["source"] == "WORKFORCE"
     # 有 workItem 沒 pv → 只能猜；f2 連 anno 都沒有，那不是「舊版 prompt」，是沒送過
@@ -256,19 +256,19 @@ def test_merge_manifest_only_deactivates_same_host():
     在 prod 清單裡查無此人，照舊邏輯會被集體作廢，訓練集無聲少 9%。"""
     from sync import UNKNOWN_HOST, merge_manifest
     old = pd.DataFrame([
-        {"fileId": "a", "active": "True", "apiHost": "pms-dev.example.invalid"},
-        {"fileId": "b", "active": "True", "apiHost": "pms.example.invalid"},
+        {"fileId": "a", "active": "True", "apiHost": "api-dev.example"},
+        {"fileId": "b", "active": "True", "apiHost": "api.example"},
         {"fileId": "c", "active": "True", "apiHost": UNKNOWN_HOST},
     ])
-    new = pd.DataFrame([{"fileId": "z", "active": True, "apiHost": "pms.example.invalid"}])
+    new = pd.DataFrame([{"fileId": "z", "active": True, "apiHost": "api.example"}])
 
-    out = merge_manifest(old, new, partial=False, api_host="pms.example.invalid").set_index("fileId")
+    out = merge_manifest(old, new, partial=False, api_host="api.example").set_index("fileId")
     assert out.loc["b", "active"] is False or out.loc["b", "active"] == False  # noqa: E712
     assert out.loc["a", "active"] == "True", "別台主機的照片不該被作廢"
     assert out.loc["c", "active"] == "True", "切換前抄的（unknown）不該被作廢"
 
     # --limit / --constr 只看了母體一片，一張都不准作廢
-    out = merge_manifest(old, new, partial=True, api_host="pms.example.invalid").set_index("fileId")
+    out = merge_manifest(old, new, partial=True, api_host="api.example").set_index("fileId")
     assert (out.loc[["a", "b", "c"], "active"] == "True").all()
 
 
@@ -517,10 +517,14 @@ def test_dhash_survives_recompression_but_separates_photos():
 def test_legacy_site_alias_matches_pms_names():
     """工地名對不上 PMS 的話，「同工地不跨組」這條鐵律就形同虛設。"""
     from legacy import site_from
+    import legacy
 
-    assert site_from("SITE-C案進度報告115.01.12", "x.pptx") == "SITE-C"
-    assert site_from("SITE-D進度報告", "x.pptx") == "SITE-D"
-    assert site_from("", "SITE-C_115.08.10.pptx") == "SITE-C"
+    # 別名表外移 reference/（公司資料不入 git）——測試自帶臨時表驗證套用邏輯
+    legacy.SITE_ALIAS = {"甲": "甲案", "乙區": "乙案"}
+    assert site_from("甲案進度報告115.01.12", "x.pptx") == "甲案"
+    assert site_from("乙區進度報告", "x.pptx") == "乙案"
+    assert site_from("", "乙區_115.08.10.pptx") == "乙案"
+    assert site_from("新工地進度報告", "x.pptx") == "新工地"   # 不在表上：原樣
 
 
 def test_drop_fallback_removes_the_junk_bag():

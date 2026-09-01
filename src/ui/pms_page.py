@@ -31,7 +31,7 @@ def with_boxes(path: str, boxes_json: str) -> "object":
 def pms_page(tabs):
     if tabs[0]:
         st.subheader("每日同步")
-        st.caption(f"來源 {os.getenv('API_BASE_URL', 'https://pms.example.invalid/')}"
+        st.caption(f"來源 {os.getenv('API_BASE_URL', '（未設 API_BASE_URL）')}"
                    f" · raw 只抄不改 · derived 隨時可砍")
 
         # 這頁只放三顆按鈕，各自負責一件別人不做的事。

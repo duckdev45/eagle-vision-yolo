@@ -9,7 +9,7 @@ QMS 失敗的原因是稽核照為「查驗點特寫」、日報照為「工人�
 投影片版面高度規則（實測 115.01~115.07 全部一致），所以用**垂直位置**而非
 文字內容來認欄位，比 regex 猜穩：
 
-    top≈0.0  頁首「SITE-D進度報告115.01.12」   → 工地名來源，不是標題
+    top≈0.0  頁首「某案進度報告115.01.12」    → 工地名來源，不是標題
     top≈0.6  「12F樑版鋼筋綁紮」                → **工項標題 = 標籤**
     top≈3.9  「115/01/12」×N                    → 日期戳（每張照片一個）
     top≈4.4  「查驗重點: 1.… 2.…」              → 人寫的查驗重點
@@ -108,7 +108,7 @@ def date_from_name(text: str) -> str | None:
     """從檔名/資料夾名抓日期。
 
     **優先用檔名而不是投影片上的日期戳**：實測有投影片打成 `2025/1/12`
-    （該案是 2026 年），而檔名 `SITE-Z115.1.12` 是對的。檔名是排程產生的，
+    （該案是 2026 年），而檔名 `某案115.1.12` 是對的。檔名是排程產生的，
     日期戳是手打的。
     """
     for m in ROC_DATE.finditer(text):
@@ -119,13 +119,18 @@ def date_from_name(text: str) -> str | None:
 
 
 # 工地名要對齊 PMS 的 constrName，否則切分時「同工地不跨組」這條鐵律形同虛設
-# ——`SITE-C` 與 `SITE-C` 是同一個案場，不併起來就會一邊進 train 一邊進 test。
-SITE_ALIAS = {"SITE-C": "SITE-C", "SITE-C": "SITE-C", "大同": "SITE-D",
-              "SITE-E": "SITE-E", "SITE-U": "SITE-U", "SITE-U": "SITE-U"}
+# ——簡稱與全名是同一個案場，不併起來就會一邊進 train 一邊進 test。
+# 工地名別名表 = 公司案場資訊，2026-09-01 起外移 reference/site_aliases.yaml（不入 git）。
+# 缺檔時不套別名（舊檔名照原樣解析），行為與「沒有別名可套」一致。
+import yaml as _yaml
+try:
+    SITE_ALIAS = _yaml.safe_load((paths.ROOT / "reference" / "site_aliases.yaml").read_text()) or {}
+except FileNotFoundError:
+    SITE_ALIAS = {}
 
 
 def site_from(header: str, fname: str) -> str:
-    """工地名。頁首「SITE-D進度報告」→ SITE-D；抓不到就退檔名去掉日期的部分。"""
+    """工地名。頁首「某案進度報告」→ 某案；抓不到就退檔名去掉日期的部分。"""
     h = re.sub(r"\s+", "", header or "")
     m = re.match(r"([一-鿿\w]{1,8}?)案?(?:進度報告|進度匯報|進度表)", h)
     if m and m.group(1):
