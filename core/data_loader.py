@@ -1,79 +1,72 @@
 # core/data_loader.py
-"""
-【系統數據快照載入中心】(Global Data Snapshot Loader)。
-這是應用程式的所有業務邏輯和工作流（如 `app.py`, `review.py`）必須調用的第一個模組。
-它負責協調所有底層數據源 (QS, Contract, Labeling, Inference)，並將它們組裝成一個時間點的數據快照。
+"""系統數據快照載入中心（Global Data Snapshot Loader）。
 
----
-【運行流程】
-1.  調用此模組的函式，獲取整個系統的數據快照。
-2.  快照中的數據必須能順利傳遞給核心計算模組 (如 review/pipeline)。
----
+V2.0 草稿期這裡回傳過 dummy manifest + 空 QS docs；2026-09-01 起接上真實服務層：
+QS 76 份、合約 6 份 195 條、labels.yaml 規則引擎、以及 data/ 的即時標籤快照。
+
+所有業務流程（pipeline、app.py）要拿「現在系統長什麼樣」，一律經過這裡——
+同一份快照給到底，不會各模組各載各的然後對不起來。
 """
 from __future__ import annotations
 
-import pandas as pd
-from typing import Dict, Any
+import sys as _sys
+import os as _os
 
-# 匯入所有核心模組的初始化/基礎組件
-from core.qs_data import load_qs_data, QS_Artifacts
-from core.contractdata import load_contract_data, list[ContractDocument]
-from core.labeler import Labeler, apply_labeling
-from core.inference_utils import get_heatmaps, calculate_embeddings
+for _p in (_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+           _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src")):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
 
-def load_full_system_snapshot() -> Dict[str, Any]:
+from typing import Any, Dict  # noqa: E402
+
+import pandas as pd  # noqa: E402
+
+import paths  # noqa: E402
+
+
+def load_full_system_snapshot(labeled: pd.DataFrame | None = None) -> Dict[str, Any]:
+    """組出當前狀態的統一數據快照。
+
+    labeled 可由呼叫端注入（操作台已有快取時直接用）；None 就現場組一份。
+    data/ 不在（全新 checkout、CI）時 labeled 給空 DataFrame，其餘服務層照常——
+    reference/ 在本機磁碟（不入 git），載得到就有。
     """
-    執行一次完整的、耗時的數據載入流程，為當前運行時創建一個數據快照。
-    """
-    print("=========================================")
-    print("⚡ Starting Global Data Snapshot Loader ⚡")
-    print("=========================================")
+    from core import contractdata, qs_data
+    from core.labeler import Labeler
 
-    # 1. Load QS Standards (Static Knowledge base)
-    qs_artifacts: QS_Artifacts = load_qs_data()
-    print(f"[SUCCESS] QS Knowledge base loaded. Docs: {len(qs_artifacts.docs)}")
+    print("⚡ Global Data Snapshot Loader")
+    qs_artifacts = qs_data.load()
+    print(f"[OK] QS 標準 {len(qs_artifacts)} 份 / "
+          f"REQUIRED {sum(len(d.required) for d in qs_artifacts.values())} 項")
 
-    # 2. Load Contract Agreements (Case-specific agreements)
-    contract_docs: list[ContractDocument] = load_contract_data("reference/contract/raw/")
-    print(f"[SUCCESS] Contract documents loaded. Total files: {len(contract_docs)}")
-    
-    # 3. Initialize Labeling Engine
-    labeler = Labeler()
-    print(f"[SUCCESS] Labeling Engine initialized. Min Class Size: {labeler.min_class_size}")
+    contract_docs = contractdata.load()
+    print(f"[OK] 合約 {len(contract_docs)} 份 / "
+          f"{sum(len(c.clauses) for c in contract_docs)} 條")
 
-    # 4. Create Dummy/Sample Data for Labeling Test
-    # 實際運行時，這部分數據 (DF) 應該從本地檔案系統載入（如 MANIFEST.csv）
-    print("[WARN] Using a dummy manifest for initial labeling test execution.")
-    dummy_df = pd.DataFrame({"fileId": ["id1", "id2", "id3"], "title": ["這是地磚貼飾", "玻璃窗戶的防水層", "這是個無法判別的奇怪標題"], "reportDate": ["2026-08-31", "2026-08-30", "2026-09-01"]})
+    labeler = Labeler.load()
+    print(f"[OK] Labeler v{labeler.version or '?'} · {len(labeler.rules)} 條規則 · "
+          f"min_class_size={labeler.min_class_size}")
 
-    # 5. Run Labeling
-    labeled_df = apply_labeling(dummy_df)
-    
-    # 6. 整合模型推理數據 (Placeholder)
-    inference_metrics = {
-        "global_heatmaps": {},
-        "global_embeddings": {}
-    }
-    
-    snapshot: Dict[str, Any] = {
+    if labeled is None:
+        if paths.MANIFEST.exists():
+            from labels import labeled_manifest
+            labeled = labeled_manifest()
+            print(f"[OK] manifest 標籤快照 {len(labeled)} 張 / {labeled.cls.nunique()} 類")
+        else:
+            labeled = pd.DataFrame()
+            print("[WARN] data/raw/manifest.csv 不存在——照片側快照為空（新環境屬正常）")
+
+    return {
         "qs_artifacts": qs_artifacts,
         "contract_docs": contract_docs,
         "labeler": labeler,
-        "labeled_data": labeled_df,
-        "inference_metrics": inference_metrics,
-        "metadata": {
-            "run_timestamp": pd.Timestamp.now().isoformat()
-        }
+        "labeled_data": labeled,
+        "metadata": {"run_timestamp": pd.Timestamp.now().isoformat()},
     }
-    print("\n✅ Global Data Snapshot successfully assembled!")
-    return snapshot
+
 
 if __name__ == "__main__":
-    print("--- Running System Check for Data Loader ---")
-    try:
-        snapshot = load_full_system_snapshot()
-        print("\n--- Data Loading System Check Complete. All core components are linked. ---")
-    except Exception as e:
-        print(f"\n🚨 FATAL BLOCKER: Data Loader Failed to Initialize. Error: {e}")
-        print("Please check if all component initialization functions (e.g., load_qs_data) are correctly implemented for file I/O.")
-
+    snap = load_full_system_snapshot()
+    print("\n--- Snapshot self-check: all real services loaded ---")
+    print(f"QS docs: {len(snap['qs_artifacts'])} · contracts: {len(snap['contract_docs'])} · "
+          f"labeled: {len(snap['labeled_data'])}")

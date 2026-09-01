@@ -1,99 +1,89 @@
 # core/review_utils.py
-"""
-高級複核佇列 (Review Queue) 的計算邏輯層。
-此模組專門處理多層次訊號的計算、分層 (Tiering) 和匯總，
-它是基於 core/labeler.py 和 core/qs_data.py 輸出的「統計學服務」。
+"""複核佇列的分層計算（服務層實作）。
 
-**⚠️ 目的:** 將純粹的、不依賴 UI 框架的計算和狀態篩選邏輯，從 Streamlit 介面中剝離出來。
+規則本來寫在 app.py 的 `review_queue()` 裡，跟 Streamlit 綁死 → 沒開瀏覽器就
+看不到還積了多少。抽出來成純函式之後 `uv run src/review.py` 直接印、操作台
+`ui/review_ui.py` 畫同一份，也測得動。
+
+四種訊號，照「誰說的」分層——不是加總成一個分數。前三種問「標籤對不對」，
+第四種問「模型會不會」，混成一個數字就看不出該先看哪一批。
 """
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
-from typing import Tuple, Set
-from core.labeler import Labeler
-from core.models import CoreItem # 預計從這裡引入更通用的 Item 結構
-# from core.qs_data import QS_Artifacts # 待進一步完善其輸入結構
+import sys as _sys
+import os as _os
 
-# --- 核心常數 ---
-MARGIN_LOW = 0.25 # The margin ratio for identifying model uncertainty (top1 - top2)
+for _p in (_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+           _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src")):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
 
-# --- 專業知識/硬編碼的規則 ---
-# 這些是在經驗累積後，不應該被模型或規則規定的知識。
-TIER_NAMES = {
-    4: "Human Conflict/Disagreement", # 人工最關鍵的異議
-    3: "Model + Gemini Disagreement", 
-    2: "Gemini Disagreement",
-    1: "Model Low-Confidence (Test Set Only)"
-}
+import json  # noqa: E402
+import pickle  # noqa: E402
+
+import pandas as pd  # noqa: E402
+
+import paths  # noqa: E402
+from core.labeler import Labeler  # noqa: E402
+
+MARGIN_LOW = 0.25  # top1 與 top2 差距小於這個 = 模型在兩類之間猶豫，值得人看
+
+TIER_NAMES = {4: "人寫的有異議", 3: "模型＋Gemini 都不同意", 2: "Gemini 有異議",
+              1: "模型難分（低邊際・僅測試集）"}
 
 
-def calculate_scoring_and_tiers(model_key: str, split_name: str) -> Tuple[dict[str, Tuple[str, float, float]], Set[str]]:
+def scores(model_key: str = "siglip", split_name: str = "") -> tuple[dict, set]:
+    """{fileId: (預測, 信心, 邊際)}, {測試集 fileId}。缺模型或特徵就回空的。
+
+    用邊際不用信心：信心 0.9 但第二名 0.85 的照片，模型其實在兩類之間猶豫；
+    信心 0.5 而第二名 0.05 的反而很篤定。邊際小 = 真的難分 = 值得人看。
     """
-    用機器學習模型的預測分佈，計算分數、信心度和邊際分數 (Score, Confidence, Margin)。
-    取代了原始 review.py 中的核心計算。
-    """
-    print(f"Calculating Model Scores for {model_key} / {split_name}...")
-    # 此處應調用 core/inference_utils.load_model_classifier 載入模型，並執行預測。
-    # 模擬數據返回
-    mock_scores = {}
-    mock_tests = {"test_file_id_A"}
-    return mock_scores, mock_tests
-
-def build_review_dataframe(df: pd.DataFrame, labeler: Labeler, scores: dict, test_ids: set, margin_low: float = MARGIN_LOW) -> pd.DataFrame:
-    """
-    整合所有來源訊號 (Label, Model, Gemini) 並計算出「異議層級 (Tiers)」。
-    這是最核心的邏輯，決定了 QC 判斷的優先級。
-    :param df: 包含了原始標籤和其他上下文信息的 DataFrame。
-    :param scores: 從模型讀取的 {fileId: (class, confidence, margin)}。
-    :param test_ids: 模型專門在測試集上學到的 ID 集合。
-    :return: 帶有 `tier`, `why`, `isTest` 等額外計算欄位的 DataFrame。
-    """
-    print("Building tiered review DataFrame structure...")
-    
-    # 1. 從 model/labeler/qs_data 獲取所有需要的上下文參數
-    # 2. 執行 TIER 計算（根據邊際分數、測試集屬性等）
-    # 3. 填充所有需要上報的欄位 (mPred, mConf, mMargin)。
-    
-    # Placeholder: Return a DataFrame with calculated 'tier'
-    df['tier'] = 0
-    df_final = df.copy()
-    
-    return df_final
-
-def build_queue_from_data(df: pd.DataFrame, labeler: Labeler, scores: dict, test_ids: set) -> pd.DataFrame:
-    """
-    高階整合函數：整合所有資料，並根據規則構建帶分層的排隊 DataFrame。
-    """
-    # This function orchestrates the flow: 
-    # 1. Check for model, run calculate_scoring_and_tiers -> scores
-    # 2. Use scores to enhance raw data -> df_scored
-    # 3. Use labeler to check for conflicts (labeler_conflict)
-    # 4. Apply criteria (tiering, filtering) -> final df
-    print("Orchestrating the full queue build process...")
-    return pd.DataFrame()
-
-def save_review_record(file_id: str, cls: str, note: str = "", boxes: list | None = None) -> None:
-    """
-    標準化地寫入複核決策。使用append-only strategy 確保歷史記錄不覆蓋。
-    """
-    from datetime import datetime, timezone
-    ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    
-    # 實際 I/O 邏輯應放在 data_loader/service 層，這裡僅保留簽名。
-    print(f"Saving review record for ID: {file_id} -> Class: {cls}")
-    pass
-
-# ... 其他輔助定義（如 TIER_NAMES）保持不變 ...
-
-if __name__ == "__main__":
-    print("--- Running self-check for Review Utils ---")
+    import numpy as np
     try:
-        # Dummy run to check dependencies
-        dq = pd.DataFrame()
-        mock_scores = {}
-        _, test_ids = calculate_scoring_and_tiers("siglip", "v1")
-        # 只要能運行到這裡，說明我們已成功將計算邏輯與UI/Presentation分開。
-    except Exception as e:
-        print(f"Error during self-check: {e}")
-    print("Review utilities loaded and modular structure verified.")
+        z = np.load(paths.FEATURES / f"{model_key}.npz", allow_pickle=True)
+        with (paths.MODELS / f"probe-{model_key}-{split_name}.pkl").open("rb") as f:
+            clf = pickle.load(f)["clf"]
+        test = set(json.loads((paths.SPLITS / f"{split_name}.json").read_text())["test"])
+    except (FileNotFoundError, KeyError):
+        return {}, set()
+    p = clf.predict_proba(z["emb"])
+    top = np.sort(p, axis=1)
+    return ({f: (clf.classes_[i], float(top[n, -1]), float(top[n, -1] - top[n, -2]))
+             for n, (f, i) in enumerate(zip(z["fileIds"].tolist(), p.argmax(1)))}, test)
+
+
+def build(df: pd.DataFrame, lab: Labeler, sc: dict, test_ids: set,
+          margin_low: float = MARGIN_LOW) -> pd.DataFrame:
+    """加上 tier / why / isTest 三欄，只留 tier > 0 的。純函式，好測。"""
+    gem = df.predWorkItem.map(
+        lambda t: (lab.label(t) or lab.fallback) if isinstance(t, str) and t else None)
+    df = df.assign(
+        gemNorm=gem,
+        mPred=df.fileId.map(lambda f: (sc.get(f) or (None,))[0]),
+        mConf=df.fileId.map(lambda f: (sc.get(f) or (None, None))[1]),
+        mMargin=df.fileId.map(lambda f: (sc.get(f) or (None, None, None))[2]))
+
+    chips, spec = df.get("clsChips"), df.get("specTrade")
+    F = pd.Series(False, index=df.index)
+    # chips 落到 fallback 不算不一致——查驗重點寫的是「素地清理是否乾淨」這種驗收條件，
+    # 本來就不含工種詞，套規則當然標不出來。那是「沒訊號」，不是「有異議」。
+    # 不濾掉的話佇列會從 27 張暴增到 111 張，全是假警報。
+    d_chips = (chips.notna() & (chips != lab.fallback) & (chips != df.cls)
+               if chips is not None else F)
+    d_spec = (spec.notna() & (spec != df.cls.str.split("-").str[0]) if spec is not None else F)
+    d_gem = gem.notna() & (gem != df.cls)
+    d_model = df.mPred.notna() & (df.mPred != df.cls)
+    # 「模型難分」只在測試集上算數：訓練集那幾百張它背過，邊際再小也是假的猶豫。
+    is_test = df.fileId.isin(test_ids)
+    unsure = df.mMargin.notna() & (df.mMargin < margin_low) & is_test
+
+    tier = pd.Series(0, index=df.index)
+    tier[unsure] = 1                    # 模型兩類難分
+    tier[d_gem] = 2                     # 只有機器有異議
+    tier[d_model & d_gem] = 3           # 模型與 Gemini 都不同意 title
+    tier[d_chips | d_spec] = 4          # 人寫的有異議 —— 最強
+    why = [", ".join(w for w, b in (("查驗項目", c), ("specKey", sp), ("Gemini", g),
+                                    ("模型不同意", m), ("模型難分", u)) if b)
+           for c, sp, g, m, u in zip(d_chips, d_spec, d_gem, d_model, unsure)]
+    q = df.assign(tier=tier, why=why, isTest=is_test)
+    return q[q.tier > 0]

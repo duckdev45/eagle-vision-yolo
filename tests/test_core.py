@@ -575,3 +575,53 @@ if __name__ == "__main__":
             fn()
             print("ok", name)
     print("全部通過")
+
+
+# ── core/ 服務層真實性（2026-09-01 接線後的守門）────────────────────────
+def test_core_services_are_real_not_stubs():
+    """src/ 相容層必須指向 core/ 的真實實作，不許漂回兩份平行邏輯。"""
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+    import labels, review, qsdata, contractdata  # noqa: E402
+    from core import contractdata as c_contract, labeler as c_labeler
+    from core import qs_data as c_qs, review_utils as c_review
+
+    assert labels.Labeler is c_labeler.Labeler
+    assert labels.save_review is c_labeler.save_review
+    assert review.build is c_review.build and review.scores is c_review.scores
+    assert qsdata.load is c_qs.load and qsdata.emit_phases is c_qs.emit_phases
+    assert contractdata.load is c_contract.load
+    assert contractdata.cross_check is c_contract.cross_check
+
+
+def test_core_qs_service_loads_real_data():
+    """core/qs_data 必須載到 reference/iso 的真檔案（V2.0 草稿期曾是空殼）。
+
+    reference/ 是公司資料、不入 git（2026-09-01 起）——裸 clone 上跳過，
+    有資料的機器上這條就是守門。
+    """
+    import pytest
+    if not os.path.isdir(os.path.join(os.path.dirname(__file__), "..", "reference", "iso", "raw")):
+        pytest.skip("reference/ 不在（公司資料不入 git）")
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+    from core import qs_data
+
+    docs = qs_data.load()
+    assert len(docs) >= 75, f"QS 應 ≥75 份（實得 {len(docs)}）"
+    assert docs["QS0907"].required and "電梯" in docs["QS0907"].name  # 編號定案
+    it = next(i for i in docs["QS0404"].required if "10~15mm" in i.name)
+    assert it.key == "QS0404-4" and it.kind == "B"
+
+
+def test_core_contract_service_loads_real_data():
+    """core/contractdata 必須載到 reference/contract 的真條款（不入 git，缺席則跳過）。"""
+    import pytest
+    if not os.path.isdir(os.path.join(os.path.dirname(__file__), "..", "reference", "contract", "raw")):
+        pytest.skip("reference/ 不在（公司資料不入 git）")
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+    from core import contractdata as cd
+
+    docs = cd.load()
+    assert len(docs) >= 4 and len(cd.all_clauses(docs)) >= 100
+    st_ = [d for d in docs if "鋼筋" in d.trade]
+    assert st_ and st_[0].kind == "物明"          # 物明≠工明，這條判斷不能丟
+    assert cd.answers_qs("QS0701-4.13"), "QS 交叉引用必須解析得到條款"

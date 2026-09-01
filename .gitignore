@@ -36,6 +36,14 @@ models/
 */.pth
 */.h5
 
+# 公司資料不上 git（QS 標準、合約工作約定、請款項、labels 對應）。
+# 2026-09-01 起以 git-filter-repo 從全部歷史移除；此規則防止再次誤加。
+reference/
+
+# 評估報告：含真實工地照片與日報 title（公開 repo 不可推）。
+# JOURNAL.md 純文字統計要進版控時用 git add -f reports/JOURNAL.md。
+reports/
+
 # Git metadata (though usually ignored by default, explicit is safer)
 .git/
 

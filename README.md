@@ -1,9 +1,13 @@
 # 🦅 Eagle Vision Project: System Architecture Design Guide (V2.0)
 
 **Version:** 2.0
-**Date:** 2026-08-31
+**Date:** 2026-09-01（修訂：指令表對齊現行 Makefile，知識庫補落地數據）
 **Status:** **🚀 Architecture Complete (Logical)**
 **Purpose:** This document defines the canonical microservice architecture and functional separation of concerns for all QC/Audit operations.
+
+> **公司資料不入 git**：`reference/`（QS 標準、合約工作約定）與 `reports/`（評估快照，
+> 含工地照片）皆已列 `.gitignore` 並從 git 歷史移除。這兩處是公司營運資料，repo 是 public。
+> 本機備份：`~/eagle-vision-reference-20260901.tar`、`~/eagle-vision-20260901-full.bundle`。
 
 ---
 

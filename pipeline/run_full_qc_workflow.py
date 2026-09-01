@@ -1,129 +1,140 @@
 # pipeline/run_full_qc_workflow.py
-"""
-高階工作流程控制腳本 (Workflow Orchestrator)。
-這是整個系統執行任務的單點入口 (Single Entry Point)。
-它不包含任何 UI 元素，只負責協調所有核心服務的執行順序。
+"""高階工作流程協調器（Workflow Orchestrator）——系統執行任務的單點入口。
 
----
-【流程守則】
-1.  依賴於核心服務層 (core/*) 的數據快照。
-2.  嚴格控制步驟執行順序：Init -> Sync -> Preprocess -> Predict -> Report.
----
+V2.0 草稿期這裡全是 `lambda: True` 假步驟；2026-09-01 起接上真實服務層：
+- `snapshot`  → core/data_loader（QS 76 份 + 合約 195 條 + 標籤快照）
+- `queue`     → core/review_utils（複核佇列，真實分層）
+- `model`     → 轉發 src/ 的 split/train/evaluate 鏈（唯一真實訓練路徑）
+
+刻意**不**在這裡重新實作訓練：src/split.py 等腳本已是被 33+ 個測試守著的真實
+流程，orchestrator 的職責是「調度與回報」，不是把邏輯抄第二份。
 """
+from __future__ import annotations
+
 import os
+import subprocess
 import sys
 import time
-from typing import Tuple, Any, Dict
+from typing import Any, Callable, Tuple
 
-# 核心服務層的依賴
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # root
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+
 from core.data_loader import load_full_system_snapshot
-from core.review_utils import (
-    calculate_scoring_and_tiers, 
-    build_queue_from_data,
-    save_review_record,
-    calculate_embeddings
-)
 
-def run_pipeline_step(step_name: str, step_func: callable, *args, **kwargs) -> Tuple[bool, Any, str]:
-    """
-    統一化地執行生命週期中的單一個步驟。回傳 (Success: bool, Result: Any, Message: str)
-    """
-    print(f"\n=============================================================")
-    print(f"🚀 [PIPELINE START] Executing: {step_name}...")
-    print("=============================================================\n")
-    
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def run_pipeline_step(step_name: str, step_func: Callable, *args, **kwargs) -> Tuple[bool, Any, str]:
+    """統一執行單一步驟。回傳 (Success, Result, Message)。"""
+    print(f"\n🚀 [PIPELINE] {step_name} ...")
     try:
-        start_time = time.time()
-        result: Any = step_func(*args, **kwargs)
-        
-        message = f"✅ SUCCESS: Step '{step_name}' completed in {time.time() - start_time:.2f} seconds."
-        return True, result, message
+        start = time.time()
+        result = step_func(*args, **kwargs)
+        return True, result, f"✅ {step_name}（{time.time() - start:.1f}s）"
     except Exception as e:
-        error_msg = f"❌ FAILED: Step '{step_name}' failed: {type(e).__name__}, {str(e)}"
-        return False, None, error_msg
+        return False, None, f"❌ {step_name} 失敗：{type(e).__name__}: {e}"
 
-def run_full_qc_workflow(stage: str, split_name: str = "v1", with_data: bool = False) -> dict:
-    """
-    主工作流程協調器。
-    根據階段 (stage) 執行從數據載入到報告生成的全流程。
-    """
-    results = {"status": "PENDING", "details": []}
-    
-    # Step 0: Load Initial Snapshot (Requirement: Must run first)
-    snapshot = load_full_system_snapshot()
-    
-    # --- 流程控制區塊 ---
-    
-    if stage == "sync":
-        # Phase 1: Data Sync
-        success, _, msg = run_pipeline_step("Data Sync & Initial Preprocessing", 
-                                              lambda: True, None) # 替換為一個空操作，以避免跨模組依賴問題
-        results["details"].append(msg)
-        
-        if not success:
-            results["status"] = "FAILED_SYNC"
-            return results
 
-        results["status"] = "SYNC_COMPLETE"
+def _sub(cmd: list[str]) -> None:
+    """以 root 為 cwd 跑 src/ 的真實腳本；非零退出碼直接拋錯（fail loud）。"""
+    r = subprocess.run(cmd, cwd=_ROOT, check=False)
+    if r.returncode != 0:
+        raise RuntimeError(f"{' '.join(cmd)} 退出碼 {r.returncode}")
 
-    elif stage == "full_run":
-        # Phase 2: Full Run - Training/Evaluation
-        
-        # 2.1 Preprocessing & Embedding Generation
-        success, _, msg = run_pipeline_step("Preprocessing & Embedding Generation", 
-                                              lambda: True, None)
-        results["details"].append(msg)
-        if not success:
-             results["status"] = "FAILED_PREPROCESS"
-             return results
 
-        # 2.2 Training (Stubbed)
-        success, _, msg = run_pipeline_step(f"Training Classifier for {split_name}", 
-                                              lambda: True, None)
-        results["details"].append(msg)
-        if not success:
-             results["status"] = "FAILED_TRAIN"
-             return results
-             
-        # 2.3 Evaluation (Stubbed)
-        success, _, msg = run_pipeline_step("Evaluation & QC Scoring", 
-                                              lambda: True, None)
-        results["details"].append(msg)
-        if not success:
-             results["status"] = "FAILED_EVALUATION"
-             return results
-             
-        # 2.4 Report (Stubbed)
-        success, _, msg = run_pipeline_step("Final Report Generation", 
-                                              lambda: True, None)
-        results["details"].append(msg)
-        if not success:
-             results["status"] = "FAILED_REPORT"
-             return results
+def snapshot() -> dict:
+    """載入全系統快照（QS + 合約 + 標籤規則 + manifest 標籤）。"""
+    return load_full_system_snapshot()
 
-        results["status"] = "WORKFLOW_COMPLETED_SUCCESS"
-        
-    else:
-        raise ValueError(f"Unknown stage '{stage}' requested.")
 
+def queue(split_name: str = "") -> Any:
+    """複核佇列（真實分層）：待人工裁決的照片，照 tier 排序。"""
+    import pandas as pd
+    from core.review_utils import build, scores
+    from labels import Labeler, human_refs, load_reviews
+
+    labeler = Labeler.load()
+    import paths as _p
+    if not _p.MANIFEST.exists():
+        return pd.DataFrame()
+    from sync import _truthy
+    df = pd.read_csv(_p.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
+    if "active" in df:
+        df = df[_truthy(df.active)]
+    df = labeler.apply(df)
+    df = df.join(human_refs(df, labeler))
+    import split as split_mod
+    sc, test_ids = scores("siglip", split_name or split_mod.current())
+    q = build(df, labeler, sc, test_ids)
+    done = set(load_reviews())
+    return q[~q.fileId.isin(done)].sort_values(["tier", "syncedAt"], ascending=False, kind="stable")
+
+
+# 向 app.py 與舊 callers 相容的名字
 def get_workflow_status(stage: str) -> Any:
-    """
-    根據 UI 導航的階段，模擬返回當前狀態的 DataFrame 視圖。
-    """
-    if stage == 'queue_preview':
-        # 返回一個結構化的模擬前瞻數據集 (dictionary format to avoid pandas dependency)
-        return [{"fileId": "id1", "tier": 4, "reportDate": "2026-08-31"}]
+    if stage == "queue_preview":
+        return queue().head(20)
+    if stage == "report_status":
+        import paths as _p
+        rows = []
+        for j in sorted(_p.REPORTS_OUT.glob("*/config.json")):
+            import json
+            cfg = json.loads(j.read_text())
+            rows.append({"run": j.parent.name, "split": cfg.get("split"),
+                         "model": cfg.get("model"), "labels": cfg.get("labelsVersion")})
+        return rows
     return {}
 
 
+def run_full_qc_workflow(stage: str, split_name: str = "v1", with_data: bool = False) -> dict:
+    """主協調器。stage ∈ {snapshot, sync, model, full_run}。
+
+    - snapshot / sync：輕量，讀檔案與抓新日報。
+    - model / full_run：透過 src/ 的既有鏈重訓（subprocess，fail loud）。
+      這兩個是**會動到 models/ 與 reports/ 的重量級操作**，刻意不在 import 時觸發。
+    """
+    results: dict[str, Any] = {"status": "PENDING", "details": []}
+
+    if stage in ("snapshot", "sync"):
+        if stage == "sync":
+            ok, _, msg = run_pipeline_step("Data Sync（src/sync.py）", _sub, [sys.executable, "src/sync.py"])
+            results["details"].append(msg)
+            if not ok:
+                results["status"] = "FAILED_SYNC"
+                return results
+        ok, snap, msg = run_pipeline_step("System Snapshot", load_full_system_snapshot)
+        results["details"].append(msg)
+        results["status"] = "SYNC_COMPLETE" if stage == "sync" else "SNAPSHOT_READY"
+        if ok:
+            results["qs_docs"] = len(snap["qs_artifacts"])
+            results["contracts"] = len(snap["contract_docs"])
+            results["labeled"] = len(snap["labeled_data"])
+
+    elif stage in ("model", "full_run"):
+        if with_data or stage == "full_run":
+            ok, _, msg = run_pipeline_step("S1-S3 sync→prepare→features", _sub,
+                                           [sys.executable, "src/sync.py"])
+            results["details"].append(msg)
+            if not ok:
+                results["status"] = "FAILED_DATA"
+                return results
+        ok, _, msg = run_pipeline_step(f"S4-7 model 鏈（split={split_name}）", _sub,
+                                       ["make", "model", f"SPLIT={split_name}"])
+        results["details"].append(msg)
+        results["status"] = "WORKFLOW_COMPLETED_SUCCESS" if ok else "FAILED_MODEL"
+
+    else:
+        raise ValueError(f"Unknown stage '{stage}' requested.")
+
+    return results
+
+
 if __name__ == "__main__":
-    print("--- Running Workflow Orchestrator Self-Check ---")
-    try:
-        # 執行流程控制的最小化單元測試 (Minimal unit test)
-        result = run_full_qc_workflow(stage="sync")
-        print("\n=============================================================")
-        print("✅ Workflow Orchestrator Self-Check SUCCESS.")
-        print(f"Final Status: {result['status']}")
-        print("=============================================================")
-    except Exception as e:
-        print(f"\n🚨 WORKFLOW ORCHESTRATOR TEST FAILURE: {type(e).__name__}: {e}")
+    print("--- Workflow Orchestrator Self-Check ---")
+    result = run_full_qc_workflow(stage="snapshot")
+    print(f"Final Status: {result['status']}")
+    for d in result["details"]:
+        print(f"  {d}")
+    if result["status"] != "SNAPSHOT_READY":
+        sys.exit(1)

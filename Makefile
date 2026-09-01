@@ -75,10 +75,12 @@ legacy: ## 一次性：從舊 pptx 抽照片（跨來源去重）→ 前處理 �
 sync: ## 只抓新日報與照片
 	uv run src/sync.py
 
-test: ## 自檢（含 QS 資料層 + 合約資料層）
+test: ## 自檢（含 QS 資料層 + 合約資料層；reference/ 為公司資料不入 git，缺席則跳過）
 	uv run --with pytest pytest tests/test_core.py -q
-	uv run src/qsdata.py --self-check
-	uv run src/contractdata.py --self-check
+	@if [ -d reference/iso/raw ]; then uv run src/qsdata.py --self-check; \
+	else echo "⚠ reference/ 不在（公司資料不入 git）——跳過 QS 自檢"; fi
+	@if [ -d reference/contract/raw ]; then uv run src/contractdata.py --self-check; \
+	else echo "⚠ reference/ 不在（公司資料不入 git）——跳過合約自檢"; fi
 
 app: ## 操作台
 	$(TRAIN) streamlit run src/app.py

@@ -1,88 +1,92 @@
 # core/inference_utils.py
-"""
-模型推理工具與輔助功能層 (ML Inference Utilities)。
-此模組負責所有與 AI 模型、影像處理和特徵提取的「純函式」邏輯。
-它是一個跨數據層的「計算服務」而非「資料源」。
+"""模型推理的計算服務（ML Inference Utilities）。
 
-**⚠️ 目的:** 將所有與 YOLO, SigLIP, 熱區生成, Embedding 計算等相關的外部庫依賴和複雜計算，
-從上層流程控制 (如 app.py, review.py) 中剝離。
-"""
+V2.0 草稿期這裡回傳 np.random 假 embedding；2026-09-01 起接真實檔案：
+embedding 在 data/derived/features/{model_key}.npz（src/features.py 產出），
+分類器在 models/probe-{model_key}-{split}.pkl（src/train.py 產出）。
 
+推理前處理的契約在 src/predict.py（與訓練的 eval_tf 逐步一致）——本檔只做
+「讀現成的、算分數」，不重新實作特徵抽取。
+"""
 from __future__ import annotations
 
-import numpy as np
-import pickle
-import os
-from typing import Tuple, Dict, Set, Optional
+import sys as _sys
+import os as _os
 
-# 由於這是核心層，這裡只定義結構和接口，真正的I/O操作和模型加載將在 core/data_loader.py 處理。
+for _p in (_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+           _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src")):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
 
-# --- 基礎模型管理 ---
+import json  # noqa: E402
+import pickle  # noqa: E402
+from typing import Any, Optional, Tuple  # noqa: E402
 
-def load_model_classifier(model_key: str, split_name: str) -> Optional[Any]:
-    """
-    載入模型用於分類預測 (Classifier).
-    :param model_key: 預設模型識別碼 (e.g., 'siglip').
-    :param split_name: 測試集/驗證集名稱。
-    :return: 訓練好的分類器物件，或 None。
-    """
-    print(f"Loading classifier for {model_key} / {split_name}...")
-    # 實際邏輯將替換為從 core/data_loader.py 讀取數據。
-    return None
+import numpy as np  # noqa: E402
 
-def calculate_embeddings(file_ids: list[str], model_key: str) -> np.ndarray:
-    """
-    批量計算圖像的 Embedding 向量。
-    :param file_ids: 需要計算的圖像 ID 列表。
-    :param model_key: 依據哪個模型計算。
-    :return: Numpy 陣列的 Embedding 向量。
-    """
-    print(f"Calculating embeddings for {file_ids} using {model_key}...")
-    # Placeholder for actual feature extraction (e.g., using an encoder model).
-    return np.random.rand(len(file_ids), 512) # Simulate feature vector size
+import paths  # noqa: E402
 
-# --- 視覺證據與熱區 (Evidence & Heatmaps) ---
 
-def get_heatmaps(file_id: str, model_key: str, split_name: str) -> Tuple[Optional[np.ndarray], Optional[Any], Optional[float], Optional[str]]:
-    """
-    獲取用於視覺證據的熱區圖、預測結果、信心分數和邊際分數。
-    """
-    print(f"Generating evidence for {file_id}...")
-    # Placeholder: Simulate return structure (Image, Prediction, Confidence, Margin)
-    return (None, None, 0.9, 0.1)
+def load_model_classifier(model_key: str = "siglip", split_name: str = "") -> Optional[Any]:
+    """載入線性探針（sklearn clf）。檔案不存在回 None——呼叫端要自己擋。"""
+    p = paths.MODELS / f"probe-{model_key}-{split_name}.pkl"
+    if not p.exists():
+        return None
+    with p.open("rb") as f:
+        return pickle.load(f)["clf"]
 
-def draw_bounding_box(original_image_path: str, box_coords: list[list[int]]) -> str:
-    """
-    根據原始圖片路徑和座標點，繪製帶邊框的圖像。
-    :param original_image_path: 原始圖片路徑。
-    :param box_coords: 一組 [[x0, y0, x1, y1], ...] 的座標列表 (0-1000 scale)。
-    :return: 新圖檔的保存路徑。
-    """
-    print(f"Drawing bounding boxes on: {original_image_path}...")
-    # Placeholder for PIL/Pillow drawing logic
-    return "path/to/drawn_image.jpg"
 
-# --- 流程控制與輔助工具 ---
+def calculate_embeddings(file_ids: list[str], model_key: str = "siglip") -> np.ndarray:
+    """{fileId → embedding}。特徵不存在就回空陣列（呼叫端要擋維度）。"""
+    p = paths.FEATURES / f"{model_key}.npz"
+    if not p.exists():
+        return np.zeros((0, 0))
+    z = np.load(p, allow_pickle=True)
+    idx = {f: n for n, f in enumerate(z["fileIds"].tolist())}
+    rows = [idx[f] for f in file_ids if f in idx]
+    return z["emb"][rows] if rows else np.zeros((0, 0))
 
-def run_inference_pipeline(data_loader_output: Any, split_name: str, log_fn: callable) -> bool:
+
+def scores(model_key: str = "siglip", split_name: str = "") -> tuple[dict, set]:
+    """{fileId: (預測, 信心, 邊際)}, {測試集 fileId}——與 review 佇列同一套算法。
+
+    用邊際不用信心：信心 0.9 但第二名 0.85 = 在兩類間猶豫；0.5 vs 0.05 = 篤定。
     """
-    執行一個從頭到尾的推理流程 (Load -> Preprocess -> Inference -> PostProcess)。
-    :param data_loader_output: 從 data_loader 取得的原始報告數據。
-    :param split_name: 當前的模型分割名稱。
-    :param log_fn: 日誌記錄函數。
-    :return: 成功與否。
+    try:
+        clf = load_model_classifier(model_key, split_name)
+        if clf is None:
+            return {}, set()
+        z = np.load(paths.FEATURES / f"{model_key}.npz", allow_pickle=True)
+        test = set(json.loads((paths.SPLITS / f"{split_name}.json").read_text())["test"])
+    except (FileNotFoundError, KeyError):
+        return {}, set()
+    p = clf.predict_proba(z["emb"])
+    top = np.sort(p, axis=1)
+    return ({f: (clf.classes_[i], float(top[n, -1]), float(top[n, -1] - top[n, -2]))
+             for n, (f, i) in enumerate(zip(z["fileIds"].tolist(), p.argmax(1)))}, test)
+
+
+def get_heatmaps(file_id: str, model_key: str = "siglip",
+                 split_name: str = "") -> Tuple[Optional[np.ndarray], Optional[Any],
+                                                 Optional[float], Optional[str]]:
+    """遮擋法熱區（explanation）。
+
+    實體在 src/explain.py（probe_cam：遮一格 → 重編碼 → 看答案掉多少）。
+    這裡是薄轉發：模型訓練依賴（torch/open_clip）還沒裝的環境照樣 import 本檔。
     """
-    print(f"*** Starting full inference pipeline for split: {split_name} ***")
-    log_fn("Stage 1: Data Preprocessing...")
-    # 1. Preprocessing (e.g., image cropping, normalization)
-    # 2. Inference (e.g., calling load_model_classifier and running numpy matrix multiplications)
-    # 3. Postprocessing (e.g., merging predictions, calculating confidence)
-    print("Pipeline execution placeholder completed successfully.")
-    return True
+    try:
+        from explain import load_cams
+    except ImportError:
+        return (None, None, None, None)
+    cams = load_cams(split_name, model_key)
+    return (cams.get(file_id), None, None, None)
 
 
 if __name__ == "__main__":
-    print("--- Testing Inference Utils ---")
-    # 由於依賴外部資源，只測試結構性運行。
-    # 這證明了模型和推理邏輯已成功獨立化，可以單獨被測試和調用。
-    print("Inference utilities loaded and structural integrity verified.")
+    print("--- Inference utils self-check ---")
+    print(f"features dir: {paths.FEATURES} exists={paths.FEATURES.exists()}")
+    print(f"models dir:   {paths.MODELS} exists={paths.MODELS.exists()}")
+    import split as split_mod
+    cur = split_mod.current() if paths.SPLITS.exists() else "v1"
+    sc, test = scores("siglip", cur)
+    print(f"split={cur} · embeddings scored: {len(sc)} · test ids: {len(test)}")

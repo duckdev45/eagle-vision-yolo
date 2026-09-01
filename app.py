@@ -1,86 +1,60 @@
-# app.py (Updated for Presentation Layer only)
-"""
-這是資料展示與用戶互動的「展示層 (Presentation Layer)」。
-此文件專門負責 Streamlit 的 UI 佈局，它不包含核心的計算、數據載入、或業務邏輯。
-所有的業務流程 (Workflow) 都必須透過調用 pipeline/run_full_qc_workflow.py 來執行。
+# app.py (V2.0 Presentation Shell — 已接上真實服務)
+"""V2.0 展示層。所有計算經 pipeline/ 協調器與 core/ 服務層，本頁不含業務邏輯。
 
-在重構後的架構中，本檔案只是一個高層的導航介面 (Navigation UI)。
+與 src/app.py（現行操作台，功能最全）的分工：這裡是架構文件承諾的
+「單點入口 + 服務分層」示範殼——展示層薄、 orchestrator 調度、服務層算。
+    uv run streamlit run app.py
 """
 from __future__ import annotations
 
-import streamlit as st
 import os
+import sys
 
-# Import the new top-level pipeline executor
-# 注意: 這是最關鍵的變動點，所有流程都必須匯入這個單點入口。
-from pipeline.run_full_qc_workflow import run_qc_workflow, get_workflow_status
+import streamlit as st
 
-# 設置頁面配置, 遵循原來的風格
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))          # root
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+
+from pipeline.run_full_qc_workflow import (  # noqa: E402
+    get_workflow_status,
+    run_full_qc_workflow,
+)
+
 st.set_page_config(page_title="eagle-vision", layout="wide", page_icon="🦅")
+st.title("🦅 Eagle Vision (QC Field Report System)")
+st.caption("V2.0 shell · 計算一律走 pipeline → core 服務層；完整操作台在 `src/app.py`")
 
-def main_page():
-    st.title("🦅 Eagle Vision (QC Field Report System)")
-    
-    tabs = st.tabs(["① Data Synchronization", "② Data Overview", "③ Image Review", "④ Review Queue", "⑤ Legacy Data", "⑥ Labeling Rules", "⑦ Reports"])
+tabs = st.tabs(["① Snapshot", "② Sync", "③ Review Queue", "④ Reports"])
 
-    # --- Tabs Mapping ---
-    # 這裡的邏輯只是綁定呼叫單一入口的函數，而非直接執行複雜流程。
-    # 真正的工作流計算將由 pipeline/run_full_qc_workflow.py 負責處理。
-    
-    # Tab 1: Sync (Calls the dedicated sync function)
-    with tabs[0]:
-        st.subheader("Data Synchronization")
-        st.caption("Focus: Ingesting raw data from the field and keeping the knowledge base fresh.")
-        # 預留給一個簡單的調度按鈕，實際執行流程由 pipeline 負責。
-        if st.button("🚀 Trigger Full Data Sync (Sync -> Preprocess -> Embeddings)", type="primary"):
-            with st.spinner("Running sync sequence..."):
-                # Placeholder: Replace with actual run_qc_workflow(stage='sync')
-                st.success("Sync routine triggered successfully. Check run logs for details.")
-        st.info("Use dedicated buttons in the specific pipeline steps for granular control.")
+with tabs[0]:
+    st.subheader("System Snapshot（唯讀）")
+    if st.button("載入快取外的全新快照", type="primary"):
+        with st.spinner("QS + 合約 + 標籤…"):
+            r = run_full_qc_workflow(stage="snapshot")
+        st.write(f"status: `{r['status']}` · QS {r.get('qs_docs')} 份 · "
+                 f"合約 {r.get('contracts')} 份 · 標籤快照 {r.get('labeled')} 張")
+        st.dataframe(r["details"], hide_index=True, width="stretch")
 
-    # Tab 2: Data Overview (Read-only for stats)
-    with tabs[1]:
-        st.subheader("Data Overview & Metrics")
-        st.caption("Dashboard showing the overall data dimensions (QS vs Contract).")
-        st.code("") # 留白佔位
-        st.info("Detailed statistical views now rely on `core/data_loader.py` to fetch static stats.") 
-        
-    # Tab 3: Image Review (View only)
-    with tabs[2]:
-        st.subheader("High-Resolution Image Review (Visual Inspection)")
-        st.caption("Focus: Spotting discrepancies manually. This view is purely observational.")
-        st.image("placeholder_image.jpg", caption="Image display area", width="stretch")
+with tabs[1]:
+    st.subheader("Data Sync（抓新日報，會動 data/）")
+    if st.button("執行 sync（src/sync.py）", type="primary"):
+        with st.spinner("同步中…"):
+            r = run_full_qc_workflow(stage="sync")
+        st.write(f"status: `{r['status']}`")
+        st.dataframe(r["details"], hide_index=True, width="stretch")
 
-    # Tab 4: Review Queue (Interactive Calculation View)
-    with tabs[3]:
-        st.subheader("Re-QC Queue")
-        st.caption("Focus: Displaying items flagged by the core logic for human arbitration.")
-        
-        # 重要的變化：不再直接調用 review_mod.build()，而是調用流程腳本來預覽狀態。
-        status_data = get_workflow_status(stage='queue_preview')
-        st.dataframe(status_data)
-        
-        if st.button("🔴 Submit Arbitrations (Save Review)"):
-            st.success("Submission button wired. Logic should now call core/review_utils.save_review_record.")
+with tabs[2]:
+    st.subheader("Review Queue（真實分層，待人工裁決）")
+    q = get_workflow_status("queue_preview")
+    if len(q):
+        st.dataframe(q[["tier", "cls", "mPred", "why", "reportDate"]].head(20),
+                     hide_index=True, width="stretch")
+        st.caption("裁決入口在現行操作台：`make app` → ④ 複核佇列")
+    else:
+        st.success("佇列是空的。")
 
-
-    # Tab 5 & 6: Legacy/Rules (Information Display)
-    with tabs[4]:
-        st.subheader("Historical Data (Legacy)")
-        st.info("Data from previous releases, for archival and historical comparison.")
-    
-    with tabs[5]:
-         st.subheader("Labeling Rules Management (labels.yaml)")
-         st.caption("This UI now only reads from the canonical file, but writes must trigger a full re-index.")
-         st.code("--- labels.yaml content preview ---")
-
-    # Tab 7: Reports
-    with tabs[6]:
-        st.subheader("Generated Reports")
-        report_statuses = get_workflow_status(stage='report_status')
-        st.dataframe(report_statuses)
-
-# Main execution function
-if __name__ == "__main__":
-    main_page()
-
+with tabs[3]:
+    st.subheader("Reports（歷次評估）")
+    rows = get_workflow_status("report_status")
+    st.dataframe(rows, hide_index=True, width="stretch")
+    st.caption("詳細分數：reports/JOURNAL.md（`make journal`）")
