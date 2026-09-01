@@ -7,14 +7,18 @@
 【Language Rule】
 Code and comments MUST ONLY use English and Chinese.
 """
+
 from __future__ import annotations
 
-import numpy as np
 import pickle
-from typing import Optional, Tuple, Dict, Any
+from typing import Any, Optional
+
+import numpy as np
+
 # 由於這是推理服務，我們只會假設它能拿到 necessary inputs from core/data_loader.py
 
 # --- 核心模型管理 (Model Loading & Utility) ---
+
 
 def load_model_classifier(model_key: str, split_name: str) -> Optional[Any]:
     """
@@ -27,6 +31,7 @@ def load_model_classifier(model_key: str, split_name: str) -> Optional[Any]:
     print(f"Loading classifier for {model_key} / {split_name}...")
     # 這裡應該實現複雜的模型載入邏輯，例如從 artifact store 讀取。
     return None
+
 
 def calculate_embeddings(file_ids: list[str], model_key: str) -> np.ndarray:
     """
@@ -42,13 +47,17 @@ def calculate_embeddings(file_ids: list[str], model_key: str) -> np.ndarray:
 
 # --- 視覺證據與熱區 (Evidence Generation) ---
 
-def get_heatmaps(file_id: str, model_key: str, split_name: str) -> Tuple[Optional[np.ndarray], Optional[Any], Optional[float], Optional[str]]:
+
+def get_heatmaps(
+    file_id: str, model_key: str, split_name: str
+) -> tuple[Optional[np.ndarray], Optional[Any], Optional[float], Optional[str]]:
     """
     Retrieves visual evidence: heatmaps, bounding boxes, confidence score, and margin score.
     """
     print(f"Generating evidence for {file_id}...")
     # Placeholder
     return (None, None, 0.9, 0.1)
+
 
 def draw_bounding_box(original_image_path: str, box_coords: list[list[int]]) -> str:
     """
@@ -60,32 +69,33 @@ def draw_bounding_box(original_image_path: str, box_coords: list[list[int]]) -> 
     print(f"Drawing bounding boxes on: {original_image_path}...")
     return "path/to/drawn_image.jpg"
 
+
 # --- 整合工作流 ---
 
-def run_inference_pipeline(data_loader_context: Dict[str, Any], split_name: str, log_fn: callable) -> Dict[str, Any]:
+
+def run_inference_pipeline(
+    data_loader_context: dict[str, Any], split_name: str, log_fn: callable
+) -> dict[str, Any]:
     """
     Orchestrates the full end-to-end inference pipeline.
     This function acts as the highest-level API for ML operations.
     """
     print(f"\n!!! Starting high-level Inference Pipeline for {split_name} !!!")
-    
+
     # 1. Get data context from the loader
     sample_files = list(data_loader_context.get("labeled_data", {}).to_dict()["fileId"])[:5]
-    
+
     # 2. Step 1: Feature Extraction (Embedding)
     embeddings = calculate_embeddings(sample_files, "siglip")
     log_fn(f"Generated {embeddings.shape[0]} embeddings.")
-    
+
     # 3. Step 2: Classification & Evidence
     all_heatmaps = []
     for file_id in sample_files:
         h, b, c, m = get_heatmaps(file_id, "yolo", split_name)
-        all_heatmaps.append({'id': file_id, 'heatmap': h, 'box': b, 'conf': c, 'margin': m})
-        
-    inference_results = {
-        "embeddings": embeddings,
-        "evidence": all_heatmaps
-    }
+        all_heatmaps.append({"id": file_id, "heatmap": h, "box": b, "conf": c, "margin": m})
+
+    inference_results = {"embeddings": embeddings, "evidence": all_heatmaps}
 
     # 4. Step 3: Report Generation Placeholder
     print(f"Inference pipeline successfully generated results for {len(sample_files)} items.")

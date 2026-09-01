@@ -14,6 +14,7 @@
 這裡只負責「哪個詞蓋得到最多沒人認領的照片」，不負責決定那是不是一個工種。
 命名規約（`工種-施作內容`）與掛在工程分類樹哪一支，是人的判斷。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,8 +26,8 @@ from collections import Counter
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(__file__))
-import paths  # noqa: E402
-from labels import Labeler  # noqa: E402
+import paths
+from labels import Labeler
 
 CJK = re.compile(r"[一-鿿]+")
 
@@ -41,12 +42,13 @@ def terms(title: str, lo: int = 2, hi: int = 4) -> set[str]:
     for run in CJK.findall(title):
         for n in range(lo, hi + 1):
             for i in range(len(run) - n + 1):
-                out.add(run[i:i + n])
+                out.add(run[i : i + n])
     return out
 
 
-def candidates(fb: Counter, ok: Counter, min_photos: int = 12,
-               purity: float = 0.9, top: int = 25) -> list[dict]:
+def candidates(
+    fb: Counter, ok: Counter, min_photos: int = 12, purity: float = 0.9, top: int = 25
+) -> list[dict]:
     """挑出值得變成新工種的詞。貪婪集合覆蓋，一張照片只算給第一個蓋到它的詞。
 
     好詞要同時滿足兩件事：
@@ -69,8 +71,7 @@ def candidates(fb: Counter, ok: Counter, min_photos: int = 12,
         for t in terms(str(title)):
             ok_terms[t] += n
 
-    pure = {t: c for t, c in fb_terms.items()
-            if c >= min_photos and c / (c + ok_terms.get(t, 0)) >= purity}
+    pure = {t: c for t, c in fb_terms.items() if c >= min_photos and c / (c + ok_terms.get(t, 0)) >= purity}
 
     # 「這個字有多通用」：出現在**已分類**標題裡的張數。施、作、安、裝、工、程
     # 這些字每個工種都在用，含它們的片段（`子施`、`裝施`）是跨詞界的碎片，不是工種。
@@ -101,8 +102,7 @@ def candidates(fb: Counter, ok: Counter, min_photos: int = 12,
         if not best:
             break
         best_n = best_key[0]
-        picked.append({"term": best, "photos": best_n,
-                       "titles": sorted(best_titles, key=lambda x: -x[1])})
+        picked.append({"term": best, "photos": best_n, "titles": sorted(best_titles, key=lambda x: -x[1])})
         for ti, _ in best_titles:
             left.pop(ti, None)
         pure.pop(best, None)
@@ -112,14 +112,14 @@ def candidates(fb: Counter, ok: Counter, min_photos: int = 12,
 def pools(src: str = "all") -> tuple[Counter, Counter, Labeler]:
     """({沒命中的標題: 張數}, {命中的標題: 張數}, Labeler)。"""
     from sync import _truthy
+
     lab = Labeler.load()
     frames = []
     if src in ("all", "pms"):
         m = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
         frames.append(m[_truthy(m.active)][["title"]].assign(src="pms"))
     if src in ("all", "legacy") and paths.LEGACY_MANIFEST.exists():
-        lg = pd.read_csv(paths.LEGACY_MANIFEST, dtype=str,
-                         keep_default_na=False, na_values=[""])
+        lg = pd.read_csv(paths.LEGACY_MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
         frames.append(lg[["title"]].assign(src="legacy"))
     df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=["title"])
     cls = df.title.map(lab.label)
@@ -132,15 +132,16 @@ def report(src: str = "all", min_photos: int = 0, top: int = 25, log=print) -> l
     fb, ok, lab = pools(src)
     min_photos = min_photos or lab.min_class_size
     total = sum(fb.values())
-    log(f"來源 {src} · 沒被規則命中 {total} 張 / {len(fb)} 種標題"
-        f" · 門檻 {min_photos} 張（= min_class_size）")
+    log(f"來源 {src} · 沒被規則命中 {total} 張 / {len(fb)} 種標題 · 門檻 {min_photos} 張（= min_class_size）")
     if not total:
         log("規則全部命中，沒有待認領的照片。")
         return []
     cand = candidates(fb, ok, min_photos=min_photos, top=top)
     covered = sum(c["photos"] for c in cand)
-    log(f"挑出 {len(cand)} 個候選詞，蓋掉 {covered}/{total} 張"
-        f"（剩 {total - covered} 張是零散的，還不值得開類別）\n")
+    log(
+        f"挑出 {len(cand)} 個候選詞，蓋掉 {covered}/{total} 張"
+        f"（剩 {total - covered} 張是零散的，還不值得開類別）\n"
+    )
     for i, c in enumerate(cand, 1):
         log(f"{i:>2}. 「{c['term']}」 {c['photos']} 張")
         for ti, n in c["titles"][:4]:
@@ -152,10 +153,14 @@ def report(src: str = "all", min_photos: int = 0, top: int = 25, log=print) -> l
         for c in cand:
             # 詞常常是跨詞界的碎片（`櫃安` = 櫥櫃+安裝），因為它蓋得比完整詞多
             # ——`櫥櫃` 漏掉「廚櫃」那種錯字。附上最常見的標題，人才看得出這是什麼工種。
-            log(f'  - {{ pattern: "{c["term"]}", label: 待命名-{c["term"]} }}'
-                f'   # {c["photos"]} 張，例：{c["titles"][0][0]}')
-        log("\n順序即優先權，第一個命中者勝——新規則插在哪一行會改變既有類別的張數，"
-            "\n插完務必 `make model SPLIT=vN` 看分數，別直接 `make use`。")
+            log(
+                f'  - {{ pattern: "{c["term"]}", label: 待命名-{c["term"]} }}'
+                f"   # {c['photos']} 張，例：{c['titles'][0][0]}"
+            )
+        log(
+            "\n順序即優先權，第一個命中者勝——新規則插在哪一行會改變既有類別的張數，"
+            "\n插完務必 `make model SPLIT=vN` 看分數，別直接 `make use`。"
+        )
     return cand
 
 
@@ -172,7 +177,7 @@ def demo() -> None:
     # 含 施、區 的被通用字扣掉，剩 石子/抿石/抿石子 同分 → 取最長
     assert [c["term"] for c in got] == ["抿石子"], got
     assert got[0]["photos"] == 18
-    assert not candidates(fb, ok, min_photos=30, top=5)   # 蓋不到門檻就別提
+    assert not candidates(fb, ok, min_photos=30, top=5)  # 蓋不到門檻就別提
 
     # 「施作」蓋 23 張比「抿石子」多，但它在已分類標題裡有 100 張 → 必須被純度擋掉
     assert "施作" not in [c["term"] for c in candidates(fb, ok, min_photos=5, top=5)]

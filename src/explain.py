@@ -15,6 +15,7 @@
     uv run --extra train src/explain.py --ckpt ft-report-scratch
     uv run --extra train src/explain.py --ckpt ft-report-scratch --set all --n 200
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,8 +27,8 @@ from datetime import date
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
-import paths  # noqa: E402
-import split as split_mod  # noqa: E402
+import paths
+import split as split_mod
 
 SIZE = 224
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -88,16 +89,15 @@ def gradcam(model, x, cls_idx: int) -> np.ndarray:
     為什麼用梯度而不是經典 CAM：timm 的 ConvNeXt 在 global pool **之後**還有一層
     LayerNorm，`sum_k w_k·featuremap_k` 那個恆等式不成立。梯度版不管架構都對。
     """
-    import torch
     import torch.nn.functional as F
 
     acts, grads = {}, {}
 
     def fwd(m, i, o):
-        acts["v"] = o          # 一定要 return None，否則 hook 會被當成「替換輸出」
+        acts["v"] = o  # 一定要 return None，否則 hook 會被當成「替換輸出」
 
     def bwd(m, gi, go):
-        grads["v"] = go[0]     # 同上：return 值會被當成新的 grad_input，尺寸不符就炸
+        grads["v"] = go[0]  # 同上：return 值會被當成新的 grad_input，尺寸不符就炸
 
     target = model.stages[-1]
     h1 = target.register_forward_hook(fwd)
@@ -106,7 +106,7 @@ def gradcam(model, x, cls_idx: int) -> np.ndarray:
         model.zero_grad(set_to_none=True)
         logits = model(x)
         logits[0, cls_idx].backward()
-        a, g = acts["v"], grads["v"]                     # (1,C,h,w)
+        a, g = acts["v"], grads["v"]  # (1,C,h,w)
         w = g.mean(dim=(2, 3), keepdim=True)
         cam = F.relu((w * a).sum(1, keepdim=True))
         cam = F.interpolate(cam, size=(SIZE, SIZE), mode="bilinear", align_corners=False)
@@ -120,7 +120,7 @@ def gradcam(model, x, cls_idx: int) -> np.ndarray:
 
 def cam_box(cam: np.ndarray, thresh: float = BOX_THRESH):
     """熱區 → 一個框。回傳 crop 內的比例框 (x0,y0,x1,y1)，全 0 表示沒有明顯熱區。"""
-    h, w = cam.shape          # 不寫死 SIZE：遮擋法的熱區是 grid×grid，不是 224×224
+    h, w = cam.shape  # 不寫死 SIZE：遮擋法的熱區是 grid×grid，不是 224×224
     ys, xs = np.where(cam >= thresh)
     if not len(xs):
         return (0.0, 0.0, 0.0, 0.0)
@@ -130,13 +130,17 @@ def cam_box(cam: np.ndarray, thresh: float = BOX_THRESH):
 def crop_box_to_orig(b, crop01):
     """crop 內的比例框 → 原圖比例框。crop01 是 crop 在原圖中的比例位置。"""
     cx0, cy0, cx1, cy1 = crop01
-    return (cx0 + b[0] * (cx1 - cx0), cy0 + b[1] * (cy1 - cy0),
-            cx0 + b[2] * (cx1 - cx0), cy0 + b[3] * (cy1 - cy0))
+    return (
+        cx0 + b[0] * (cx1 - cx0),
+        cy0 + b[1] * (cy1 - cy0),
+        cx0 + b[2] * (cx1 - cx0),
+        cy0 + b[3] * (cy1 - cy0),
+    )
 
 
 def to_1000(b):
     """與 Gemini evidence 同格式：[xMin,yMin,xMax,yMax]，0~1000 整數。"""
-    return [int(round(min(1000, max(0, v * 1000)))) for v in b]
+    return [round(min(1000, max(0, v * 1000))) for v in b]
 
 
 def deletion_test(model, x, cls_idx: int, b) -> tuple[float, int | None]:
@@ -153,7 +157,7 @@ def deletion_test(model, x, cls_idx: int, b) -> tuple[float, int | None]:
     x2 = x.clone()
     # 灰色 = 訓練時遮罩用的 (127,127,127)，正規化後的值
     gray = torch.tensor((127 / 255.0 - MEAN) / STD, dtype=x.dtype).view(1, 3, 1, 1)
-    x0, y0, x1, y1 = (int(round(v * SIZE)) for v in b)
+    x0, y0, x1, y1 = (round(v * SIZE) for v in b)
     x2[:, :, y0:y1, x0:x1] = gray
     with torch.no_grad():
         p = torch.softmax(model(x2), 1)[0]
@@ -171,8 +175,7 @@ def corner_mass(cam: np.ndarray) -> float:
     total = cam.sum()
     if total <= 0:
         return 0.0
-    s = (cam[:ch, :cw].sum() + cam[:ch, -cw:].sum()
-         + cam[-ch:, :cw].sum() + cam[-ch:, -cw:].sum())
+    s = cam[:ch, :cw].sum() + cam[:ch, -cw:].sum() + cam[-ch:, :cw].sum() + cam[-ch:, -cw:].sum()
     return float(s / total)
 
 
@@ -196,8 +199,13 @@ def overlay(crop, cam: np.ndarray, box, label: str):
     base = crop.convert("RGB")
     w, h = base.size
     if cam.shape != (h, w):
-        cam = np.asarray(Image.fromarray((np.clip(cam, 0, 1) * 255).astype(np.uint8))
-                         .resize((w, h), Image.BILINEAR), dtype=np.float32) / 255.0
+        cam = (
+            np.asarray(
+                Image.fromarray((np.clip(cam, 0, 1) * 255).astype(np.uint8)).resize((w, h), Image.BILINEAR),
+                dtype=np.float32,
+            )
+            / 255.0
+        )
     # 熱區上色：藍→紅，用 cam 當 alpha，暗處保留原圖
     c = np.clip(cam, 0, 1)[..., None]
     heat = np.concatenate([c, np.clip(1.2 - 2 * c, 0, 1) * 0.4, np.clip(1 - 2 * c, 0, 1)], axis=2)
@@ -208,8 +216,7 @@ def overlay(crop, cam: np.ndarray, box, label: str):
     left = base.copy()
     if box[2] > box[0]:
         d = ImageDraw.Draw(left)
-        d.rectangle([box[0] * w, box[1] * h, box[2] * w, box[3] * h],
-                    outline=(255, 60, 60), width=3)
+        d.rectangle([box[0] * w, box[1] * h, box[2] * w, box[3] * h], outline=(255, 60, 60), width=3)
     out = Image.new("RGB", (w * 2 + 6, h), (20, 20, 20))
     out.paste(left, (0, 0))
     out.paste(right, (w + 6, 0))
@@ -265,21 +272,23 @@ def probe_cam(im, clf, enc, grid: int = GRID, win: int = 2):
     im = im.convert("RGB")
     w, h = im.size
     cw, ch = w / grid, h / grid
-    rects = [(x, y, (x * cw, y * ch, min(w, (x + win) * cw), min(h, (y + win) * ch)))
-             for y in range(grid) for x in range(grid)]
+    rects = [
+        (x, y, (x * cw, y * ch, min(w, (x + win) * cw), min(h, (y + win) * ch)))
+        for y in range(grid)
+        for x in range(grid)
+    ]
     cells = []
     for _, _, r in rects:
         c = im.copy()
         ImageDraw.Draw(c).rectangle(r, fill=FILL_GRAY)
         cells.append(c)
-    p = clf.predict_proba(embed(enc, [im] + cells))
+    p = clf.predict_proba(embed(enc, [im, *cells]))
     k = int(p[0].argmax())
     cam = np.clip(p[0, k] - p[1:, k], 0, None).reshape(grid, grid)
     top = int(np.argmax(cam))
     x0, y0, x1, y1 = rects[top][2]
     m = cam.max()
-    return ((cam / m if m > 0 else cam), clf.classes_[k], float(p[0, k]),
-            (x0 / w, y0 / h, x1 / w, y1 / h))
+    return ((cam / m if m > 0 else cam), clf.classes_[k], float(p[0, k]), (x0 / w, y0 / h, x1 / w, y1 / h))
 
 
 def cam_cache(split_name: str, model_key: str = "siglip"):
@@ -292,13 +301,15 @@ def load_cams(split_name: str, model_key: str = "siglip") -> dict:
     if not f.exists():
         return {}
     z = np.load(f, allow_pickle=True)
-    return {i: (c, p, float(cf), tuple(b))
-            for i, c, p, cf, b in zip(z["fileIds"], z["cams"], z["preds"],
-                                      z["confs"], z["boxes"])}
+    return {
+        i: (c, p, float(cf), tuple(b))
+        for i, c, p, cf, b in zip(z["fileIds"], z["cams"], z["preds"], z["confs"], z["boxes"])
+    }
 
 
-def run_probe(split_name: str | None = None, model_key: str = "siglip", grid: int = GRID,
-              force: bool = False, log=print) -> str:
+def run_probe(
+    split_name: str | None = None, model_key: str = "siglip", grid: int = GRID, force: bool = False, log=print
+) -> str:
     """把所有日報照的熱區一次算完存起來，操作台就不必每張等編碼器。
 
     一張 grid²+1 次 forward，批次跑約 0.5 秒；593 張約 5 分鐘。
@@ -306,8 +317,9 @@ def run_probe(split_name: str | None = None, model_key: str = "siglip", grid: in
     """
     import pickle
 
-    import split as sm
     from PIL import Image
+
+    import split as sm
 
     split_name = split_name or sm.current()
     with (paths.MODELS / f"probe-{model_key}-{split_name}.pkl").open("rb") as f:
@@ -326,18 +338,21 @@ def run_probe(split_name: str | None = None, model_key: str = "siglip", grid: in
             log(f"  {i}/{len(todo)}")
 
     ids = sorted(have)
-    np.savez(out,
-             fileIds=np.array(ids),
-             cams=np.stack([have[i][0] for i in ids]).astype(np.float32),
-             preds=np.array([have[i][1] for i in ids]),
-             confs=np.array([have[i][2] for i in ids], dtype=np.float32),
-             boxes=np.array([have[i][3] for i in ids], dtype=np.float32))
+    np.savez(
+        out,
+        fileIds=np.array(ids),
+        cams=np.stack([have[i][0] for i in ids]).astype(np.float32),
+        preds=np.array([have[i][1] for i in ids]),
+        confs=np.array([have[i][2] for i in ids], dtype=np.float32),
+        boxes=np.array([have[i][3] for i in ids], dtype=np.float32),
+    )
     log(f"寫入 {out}")
     return str(out)
 
 
-def run(ckpt: str = "ft-report-scratch", which: str = "test", n: int = 0,
-        run_tag: str | None = None, log=print) -> str:
+def run(
+    ckpt: str = "ft-report-scratch", which: str = "test", n: int = 0, run_tag: str | None = None, log=print
+) -> str:
     from PIL import Image
 
     model, meta = load_model(ckpt)
@@ -356,8 +371,10 @@ def run(ckpt: str = "ft-report-scratch", which: str = "test", n: int = 0,
     split_classes = set(sp.get("classes") or sp["labels"].values())
     shared = split_classes & set(classes)
     if len(shared) < len(split_classes):
-        log(f"⚠ 類別集不符:checkpoint {len(classes)} 類、split {len(split_classes)} 類、"
-            f"共通只有 {len(shared)} 類。")
+        log(
+            f"⚠ 類別集不符:checkpoint {len(classes)} 類、split {len(split_classes)} 類、"
+            f"共通只有 {len(shared)} 類。"
+        )
         log(f"  checkpoint: {sorted(classes)}")
         log(f"  split:      {sorted(split_classes)}")
         log("  → 熱區照樣正確(它只解釋預測),但 top-1 與 truth 欄不可信,需重訓或改名對齊。")
@@ -372,6 +389,7 @@ def run(ckpt: str = "ft-report-scratch", which: str = "test", n: int = 0,
         crop, crop01 = eval_crop(im)
         x = to_tensor(crop)
         import torch
+
         with torch.no_grad():
             p = torch.softmax(model(x), 1)[0].numpy()
         k = int(p.argmax())
@@ -380,7 +398,7 @@ def run(ckpt: str = "ft-report-scratch", which: str = "test", n: int = 0,
         b_orig = crop_box_to_orig(b, crop01) if b[2] > b[0] else b
         truth = sp["labels"].get(f)
         pred, conf = classes[k], float(p[k])
-        comparable = truth in classes           # 標籤與這個 checkpoint 同世代才能算對錯
+        comparable = truth in classes  # 標籤與這個 checkpoint 同世代才能算對錯
 
         conf_after, flip_to = deletion_test(model, x, k, b)
         g = gem.get(f) or []
@@ -388,19 +406,25 @@ def run(ckpt: str = "ft-report-scratch", which: str = "test", n: int = 0,
         cx, cy = (b_orig[0] + b_orig[2]) / 2, (b_orig[1] + b_orig[3]) / 2
         in_gem = any(gb[0] <= cx <= gb[2] and gb[1] <= cy <= gb[3] for gb in g) if g else None
 
-        rows.append({
-            "fileId": f, "set": "test" if f in test_set else "train",
-            "truth": truth, "comparable": comparable,
-            "hit": (truth == pred) if comparable else None, "pred": pred,
-            "conf": round(conf, 4),
-            "box": to_1000(b_orig), "cornerMass": round(corner_mass(cam), 4),
-            "confAfterMaskingBox": round(conf_after, 4),
-            "confDrop": round(conf - conf_after, 4),
-            "flippedTo": None if flip_to is None else classes[flip_to],
-            "geminiBoxes": len(g),
-            "iouWithGemini": None if best_iou is None else round(best_iou, 3),
-            "camCenterInsideGeminiBox": in_gem,
-        })
+        rows.append(
+            {
+                "fileId": f,
+                "set": "test" if f in test_set else "train",
+                "truth": truth,
+                "comparable": comparable,
+                "hit": (truth == pred) if comparable else None,
+                "pred": pred,
+                "conf": round(conf, 4),
+                "box": to_1000(b_orig),
+                "cornerMass": round(corner_mass(cam), 4),
+                "confAfterMaskingBox": round(conf_after, 4),
+                "confDrop": round(conf - conf_after, 4),
+                "flippedTo": None if flip_to is None else classes[flip_to],
+                "geminiBoxes": len(g),
+                "iouWithGemini": None if best_iou is None else round(best_iou, 3),
+                "camCenterInsideGeminiBox": in_gem,
+            }
+        )
         # 檔名只算一次並寫進 row：先前是存檔與 contact 各自 format 一次,
         # round(conf,4) 與原始 float 在 0.925 這種邊界會格出 0.92 / 0.93 兩種名字,
         # contact 就有一張圖破圖。單一來源才不會再犯。
@@ -413,9 +437,20 @@ def run(ckpt: str = "ft-report-scratch", which: str = "test", n: int = 0,
 
     summary = summarize(rows)
     (outdir / "cam_stats.json").write_text(
-        json.dumps({"checkpoint": ckpt, "split": meta["split"], "set": which,
-                    "boxThresh": BOX_THRESH, "cornerAreaShare": 4 * CORNER_W * CORNER_H,
-                    "summary": summary, "photos": rows}, ensure_ascii=False, indent=1))
+        json.dumps(
+            {
+                "checkpoint": ckpt,
+                "split": meta["split"],
+                "set": which,
+                "boxThresh": BOX_THRESH,
+                "cornerAreaShare": 4 * CORNER_W * CORNER_H,
+                "summary": summary,
+                "photos": rows,
+            },
+            ensure_ascii=False,
+            indent=1,
+        )
+    )
     contact_html(rows, outdir, ckpt, summary)
     log(f"依據報告 → {outdir}")
     for k, v in summary.items():
@@ -457,16 +492,25 @@ def summarize(rows: list[dict]) -> dict:
     withg = [r for r in rows if r["geminiBoxes"]]
     hit = [r for r in te if r["hit"]]
     miss = [r for r in te if not r["hit"]]
-    f = lambda xs: round(float(np.mean(xs)), 4) if len(xs) else None
+
+    def f(xs):
+        return round(float(np.mean(xs)), 4) if len(xs) else None
+
     return {
-        "photos": len(rows), "comparableTestPhotos": len(te),
+        "photos": len(rows),
+        "comparableTestPhotos": len(te),
         "testTop1": f([r["hit"] for r in te]),
         "cornerMassMean": f(cm),
         "cornerMassMeanCorrect": f([r["cornerMass"] for r in hit]),
         "cornerMassMeanWrong": f([r["cornerMass"] for r in miss]),
         "cornerMassOver30pct": int(sum(1 for v in cm if v > 0.30)),
-        "boxAreaMean": f([(r["box"][2] - r["box"][0]) * (r["box"][3] - r["box"][1]) / 1e6
-                          for r in rows if r["box"][2] > r["box"][0]]),
+        "boxAreaMean": f(
+            [
+                (r["box"][2] - r["box"][0]) * (r["box"][3] - r["box"][1]) / 1e6
+                for r in rows
+                if r["box"][2] > r["box"][0]
+            ]
+        ),
         "confDropMean": f([r["confDrop"] for r in rows]),
         "predFlipRate": f([r["flippedTo"] is not None for r in rows]),
         "photosWithGeminiBoxes": len(withg),
@@ -477,6 +521,7 @@ def summarize(rows: list[dict]) -> dict:
 
 def contact_html(rows, outdir, ckpt: str, summary: dict) -> None:
     """可在瀏覽器翻閱的對照頁。左原圖右熱區，紅=判錯。"""
+
     def card(r):
         name = r["file"]
         cls = "na" if not r["comparable"] else ("hit" if r["hit"] else "miss")
@@ -485,15 +530,17 @@ def contact_html(rows, outdir, ckpt: str, summary: dict) -> None:
             warn = ' <b class="w">角落熱區 %.0f%%</b>' % (r["cornerMass"] * 100)
         gem = ""
         if r["iouWithGemini"] is not None:
-            gem = " · 與 Gemini 框 IoU %.2f" % r["iouWithGemini"]
-        dele = " · 遮掉框後信心 %.2f" % r["confAfterMaskingBox"]
+            gem = " · 與 Gemini 框 IoU {:.2f}".format(r["iouWithGemini"])
+        dele = " · 遮掉框後信心 {:.2f}".format(r["confAfterMaskingBox"])
         if r["flippedTo"]:
             dele += f' <b class="ok">→ 改答 {r["flippedTo"]}</b>'
         gem = dele + gem
         truth = "" if r["hit"] else (" ／ 日報 " + str(r["truth"]))
-        return (f'<figure class="{cls}"><img src="overlay/{name}" loading="lazy">'
-                f'<figcaption><b>{r["pred"]}</b> {r["conf"]:.2f}{truth}'
-                f'<span class="m">{r["set"]}{gem}{warn}</span></figcaption></figure>')
+        return (
+            f'<figure class="{cls}"><img src="overlay/{name}" loading="lazy">'
+            f"<figcaption><b>{r['pred']}</b> {r['conf']:.2f}{truth}"
+            f'<span class="m">{r["set"]}{gem}{warn}</span></figcaption></figure>'
+        )
 
     s = summary
     head = f"""<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8">
@@ -521,19 +568,19 @@ figure.hit figcaption b:first-child{{color:#1baf7a}}
 <p class="s">每張圖：<b>左＝原圖與推出的佐證框，右＝熱區</b>。紅框卡片＝判錯。
 熱區是模型自己的依據，不是 Gemini 的猜測。</p>
 <div class="kpi">
- <div class="k"><i>照片</i><b>{s['photos']}</b></div>
- <div class="k"><i>可比測試集 top-1</i><b>{s['testTop1']} <small>(n={s['comparableTestPhotos']})</small></b></div>
- <div class="k"><i>熱區落在遮罩角落</i><b>{s['cornerMassMean']:.1%}</b></div>
+ <div class="k"><i>照片</i><b>{s["photos"]}</b></div>
+ <div class="k"><i>可比測試集 top-1</i><b>{s["testTop1"]} <small>(n={s["comparableTestPhotos"]})</small></b></div>
+ <div class="k"><i>熱區落在遮罩角落</i><b>{s["cornerMassMean"]:.1%}</b></div>
  <div class="k"><i>角落面積佔比（基準）</i><b>14.4%</b></div>
- <div class="k"><i>角落熱區 &gt;30% 的照片</i><b>{s['cornerMassOver30pct']}</b></div>
- <div class="k"><i>佐證框平均面積</i><b>{(s['boxAreaMean'] or 0):.1%}</b></div>
- <div class="k"><i>遮掉框後信心平均降幅</i><b>{(s['confDropMean'] or 0):.2f}</b></div>
- <div class="k"><i>遮掉框後答案翻掉</i><b>{(s['predFlipRate'] or 0):.0%}</b></div>
+ <div class="k"><i>角落熱區 &gt;30% 的照片</i><b>{s["cornerMassOver30pct"]}</b></div>
+ <div class="k"><i>佐證框平均面積</i><b>{(s["boxAreaMean"] or 0):.1%}</b></div>
+ <div class="k"><i>遮掉框後信心平均降幅</i><b>{(s["confDropMean"] or 0):.2f}</b></div>
+ <div class="k"><i>遮掉框後答案翻掉</i><b>{(s["predFlipRate"] or 0):.0%}</b></div>
 </div>
 <div class="note"><b>怎麼讀「熱區落在遮罩角落」：</b>四個灰色角落合計佔畫面 14.4%，
 本身沒有工項資訊。若這個數字明顯高於 14.4%，代表模型在拿遮罩邊界當捷徑猜答案，
 分數再高也不可信。判對與判錯的照片分別是
-{s['cornerMassMeanCorrect']} / {s['cornerMassMeanWrong']}。<br><br>
+{s["cornerMassMeanCorrect"]} / {s["cornerMassMeanWrong"]}。<br><br>
 <b>怎麼讀「遮掉框後」：</b>把紅框塗成灰色再問一次同一個模型。信心大跌或答案翻掉，
 代表這個框真的是它的依據；信心幾乎不動，代表那張熱圖只是裝飾、依據其實在別處。
 這是驗證「解釋可不可信」，不是驗證「模型準不準」。</div>
@@ -548,8 +595,7 @@ if __name__ == "__main__":
     ap.add_argument("--set", dest="which", default="test", choices=["test", "all"])
     ap.add_argument("--n", type=int, default=0, help="0 = 全部")
     ap.add_argument("--tag", default=None)
-    ap.add_argument("--probe", action="store_true",
-                    help="改成批次算線上那顆探針的熱區，存 npz 給操作台用")
+    ap.add_argument("--probe", action="store_true", help="改成批次算線上那顆探針的熱區，存 npz 給操作台用")
     ap.add_argument("--split", default=None)
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()

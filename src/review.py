@@ -5,6 +5,7 @@
     uv run src/review.py                # 還沒裁的，照優先序印
     uv run src/review.py --since 2026-08-19   # 某天之後才進來的
 """
+
 from __future__ import annotations
 
 import argparse
@@ -14,20 +15,21 @@ import sys
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # root
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))                   # src/
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # src/
 
-import paths  # noqa: E402
-import split as split_mod  # noqa: E402
-from core.review_utils import TIER_NAMES, build, scores  # noqa: E402
-from labels import Labeler, human_refs, load_reviews  # noqa: E402
+import paths
+import split as split_mod
+from core.review_utils import TIER_NAMES, build, scores
+from labels import Labeler, human_refs, load_reviews
 
-__all__ = ["TIER_NAMES", "build", "scores", "queue"]
+__all__ = ["TIER_NAMES", "build", "queue", "scores"]
 
 
 def _labeled() -> tuple[pd.DataFrame, Labeler]:
     """manifest + 規則標籤 + 人寫的兩個參考答案。與 app.labeled() 同一套，
     但不經過 Streamlit 的 cache_data（那個裝飾器在無 st context 下會炸）。"""
     from sync import _truthy
+
     df = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
     if "active" in df:
         df = df[_truthy(df.active)]
@@ -56,8 +58,10 @@ if __name__ == "__main__":
 
     q = queue(a.split, a.since)
     cur = a.split or split_mod.current()
-    print(f"模型 {cur} · 已裁 {len(load_reviews())} 筆 · 待裁 {len(q)} 張"
-          + (f"（reportDate >= {a.since}）" if a.since else ""))
+    print(
+        f"模型 {cur} · 已裁 {len(load_reviews())} 筆 · 待裁 {len(q)} 張"
+        + (f"（reportDate >= {a.since}）" if a.since else "")
+    )
     if not len(q):
         print("佇列是空的。")
         sys.exit(0)
@@ -68,6 +72,5 @@ if __name__ == "__main__":
     print(f"\n前 {min(a.limit, len(q))} 張（最強訊號在前）：")
     print(f"{'fileId':10} {'層':>2} {'reportDate':11} {'現在的標籤':14} {'模型猜':14} 訊號")
     for r in q.head(a.limit).itertuples():
-        print(f"{str(r.fileId)[:8]:10} {r.tier:>2} {str(r.reportDate):11} "
-              f"{str(r.cls):14} {str(r.mPred):14} {r.why}")
+        print(f"{str(r.fileId)[:8]:10} {r.tier:>2} {r.reportDate!s:11} {r.cls!s:14} {r.mPred!s:14} {r.why}")
     print("\n裁決要人做：`make app` → ④ 複核佇列。裁完 `make model SPLIT=vN` 才會進模型。")

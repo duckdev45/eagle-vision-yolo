@@ -1,11 +1,12 @@
 """所有路徑集中一處，其餘模組不要自己拼字串。"""
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
 RAW = ROOT / "data" / "raw"
-PHOTOS = RAW / "photos"          # 不可變層：{fileId}.{ext}
-REPORTS_JSON = RAW / "reports"   # 不可變層：日報原始 JSON 快照
+PHOTOS = RAW / "photos"  # 不可變層：{fileId}.{ext}
+REPORTS_JSON = RAW / "reports"  # 不可變層：日報原始 JSON 快照
 MANIFEST = RAW / "manifest.csv"
 INDEX = RAW / "report_index.csv"  # 同步狀態（version 水位線）
 
@@ -15,24 +16,24 @@ INDEX = RAW / "report_index.csv"  # 同步狀態（version 水位線）
 REVIEW = ROOT / "data" / "review.csv"
 
 DERIVED = ROOT / "data" / "derived"
-IMAGES = DERIVED / "images"      # 遮蔽後 jpg
+IMAGES = DERIVED / "images"  # 遮蔽後 jpg
 FEATURES = DERIVED / "features"
 SPLITS = DERIVED / "splits"
-TREE = DERIVED / "tree"          # 有結構的照片瀏覽樹（symlink）
+TREE = DERIVED / "tree"  # 有結構的照片瀏覽樹（symlink）
 
 # --- QMS 稽核照（另一個系統、另一套標籤，刻意不與日報混在同一棵樹）---------
 # --- 舊版 pptx 進度報告（第三個資料源）------------------------------------
 # 與日報同分佈（同一批工地主任、同一種構圖），但**不是**同一個系統產的，
 # 所以分開放：來源要看得出來，混在 raw/photos 裡就再也分不清哪張是哪來的。
 LEGACY = ROOT / "data" / "legacy"
-LEGACY_PHOTOS = LEGACY / "raw" / "photos"      # {sha1}.{ext}，檔名就是內容雜湊
+LEGACY_PHOTOS = LEGACY / "raw" / "photos"  # {sha1}.{ext}，檔名就是內容雜湊
 LEGACY_MANIFEST = LEGACY / "raw" / "manifest.csv"
 LEGACY_IMAGES = LEGACY / "derived" / "images"
 
 QMS = ROOT / "data" / "qms"
-QMS_PHOTOS = QMS / "raw" / "photos"        # {fileId}.jpg，浮水印烤死在畫面上
+QMS_PHOTOS = QMS / "raw" / "photos"  # {fileId}.jpg，浮水印烤死在畫面上
 QMS_MANIFEST = QMS / "raw" / "manifest.csv"
-QMS_CELLS = QMS / "raw" / "cells.csv"      # 母體清單（抽樣前的全部格子）
+QMS_CELLS = QMS / "raw" / "cells.csv"  # 母體清單（抽樣前的全部格子）
 QMS_IMAGES = QMS / "derived" / "images"
 QMS_TREE = QMS / "derived" / "tree"
 
@@ -42,6 +43,19 @@ LABELS_YAML = ROOT / "labels.yaml"
 
 
 def ensure_dirs() -> None:
-    for p in (PHOTOS, REPORTS_JSON, IMAGES, FEATURES, SPLITS, TREE, REPORTS_OUT, MODELS,
-              QMS_PHOTOS, QMS_IMAGES, QMS_TREE, LEGACY_PHOTOS, LEGACY_IMAGES):
+    for p in (
+        PHOTOS,
+        REPORTS_JSON,
+        IMAGES,
+        FEATURES,
+        SPLITS,
+        TREE,
+        REPORTS_OUT,
+        MODELS,
+        QMS_PHOTOS,
+        QMS_IMAGES,
+        QMS_TREE,
+        LEGACY_PHOTOS,
+        LEGACY_IMAGES,
+    ):
         p.mkdir(parents=True, exist_ok=True)

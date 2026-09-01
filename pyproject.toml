@@ -20,6 +20,7 @@ dependencies = [
     # 只標得出方格或單一矩形，標不了「這張有兩處證據、其中一處是斜的」——
     # 而框的用途是餵訓練，標得不準等於餵髒資料，這個依賴省不得。
     "streamlit-drawable-canvas>=0.9",
+    "pandas-stubs~=3.0.5",
 ]
 
 [project.optional-dependencies]
@@ -33,6 +34,65 @@ train = [
     "onnx>=1.22.0",
     "onnxruntime>=1.28.0",
 ]
+# 開發：lint + format（Ruff 一件取代 flake8+isort+black）
+dev = [
+    "ruff>=0.6",
+    "pytest>=8",
+]
 
 [tool.uv]
 package = false
+
+# ── Ruff：lint + format 統一配置 ─────────────────────────────────────
+[tool.ruff]
+line-length = 110                     # 既有慣例：>110 只有 178 行（多為表格註解），>100 有 455 行
+target-version = "py312"
+extend-exclude = [".venv", "data", "models", "reference", "reports"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes（未用變數/import——真 bug 捕手）
+    "I",   # isort（import 排序）
+    "B",   # bugbear（常見坑）
+    "UP",  # pyupgrade（現代語法）
+    "RUF", # ruff 自家規則（含 RUF100 unused-noqa——noqa 防線的反向守門）
+]
+ignore = [
+    "E501",   # 行長交給 formatter 管（且表格式註解值得例外）
+    "UP006",  # typing.List→list 等：dataclass 欄位型別字串化前後一致性優先
+    "UP045",  # Optional[X]→X | None：同上，漸進統一
+    "BLE001", # blind-except：操作台/AI 探測的「一個步驟炸不掉整頁」是刻意的
+    "S112",   # try-except-continue：TSV 解析的容錯是刻意的（髒列跳過續行）
+    "RUF001", # ambiguous-unicode：中文 codebase 的全形標點是正確用法，不是 ambiguous
+    "RUF002", # 同上（docstring）
+    "RUF003", # 同上（comment）
+    "B905",   # zip strict=：3.10+ 語法，此專案 hot path 早已人工核過配對長度
+]
+# 注意：E402 **刻意不 ignore**——src/ 與 core/ 的 bootstrap（sys.path.insert 後才
+# import paths）靠 80 個 `# noqa: E402` 壓制；ignore E402 會讓那些 noqa 變成
+# RUF100 的「多餘指令」，反而打破防線。
+
+[tool.ruff.lint.per-file-ignores]
+# CLI 相容層：`from core.X import *` 的 re-export 由 __all__ 認列，F401 勿擋
+"src/qsdata.py" = ["F401", "F403"]
+"src/contractdata.py" = ["F401", "F403"]
+"src/labels.py" = ["F401"]
+"src/review.py" = ["F401"]
+# inference/model_runner.py 同為薄轉發層
+"inference/model_runner.py" = ["F401"]
+"tests/test_core.py" = ["F401"]       # 測試容許寬鬆 import
+
+[tool.ruff.lint.isort]
+known-first-party = ["paths", "labels", "sync", "split", "review", "qsdata", "contractdata", "explain", "prepare", "qms", "boxes", "organize", "features", "legacy", "audit", "newclass", "taxonomy", "api"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.5",
+]

@@ -3,6 +3,7 @@
 座標是 0~1000 的相對值，乘上實際尺寸才是像素。
 操作台與稽核腳本都要用，所以放這裡而不是任一邊的檔案裡。
 """
+
 from __future__ import annotations
 
 import json
@@ -22,15 +23,16 @@ def parse(boxes_json) -> list[dict]:
     for b in raw if isinstance(raw, list) else []:
         box = (b.get("box") or b.get("boundingBox") or []) if isinstance(b, dict) else []
         if len(box) == 4:
-            out.append({"box": [float(v) for v in box], "label": b.get("label"),
-                        "conf": b.get("conf")})
+            out.append({"box": [float(v) for v in box], "label": b.get("label"), "conf": b.get("conf")})
     return out
 
 
 def area(boxes_json) -> float:
     """最大框佔畫面的比例。接近 1 表示它框了整張圖，那種框拿來裁圖等於沒裁。"""
-    return max((abs(b["box"][2] - b["box"][0]) * abs(b["box"][3] - b["box"][1]) / 1e6
-                for b in parse(boxes_json)), default=0.0)
+    return max(
+        (abs(b["box"][2] - b["box"][0]) * abs(b["box"][3] - b["box"][1]) / 1e6 for b in parse(boxes_json)),
+        default=0.0,
+    )
 
 
 def draw(path: str, boxes_json: str):
@@ -42,7 +44,11 @@ def draw(path: str, boxes_json: str):
     w, h = im.size
     d = ImageDraw.Draw(im)
     for b in parse(boxes_json):
-        x0, y0, x1, y1 = (b["box"][0] * w / 1000, b["box"][1] * h / 1000,
-                          b["box"][2] * w / 1000, b["box"][3] * h / 1000)
+        x0, y0, x1, y1 = (
+            b["box"][0] * w / 1000,
+            b["box"][1] * h / 1000,
+            b["box"][2] * w / 1000,
+            b["box"][3] * h / 1000,
+        )
         d.rectangle([x0, y0, x1, y1], outline=OUTLINE, width=max(2, w // 200))
     return im

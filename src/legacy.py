@@ -22,6 +22,7 @@ QMS 失敗的原因是稽核照為「查驗點特寫」、日報照為「工人�
     uv run src/legacy.py --root ~/Downloads/115年日報表             # 實際抽出
     uv run src/legacy.py --stats                                    # 對已抽出的算類別分佈
 """
+
 from __future__ import annotations
 
 import argparse
@@ -34,21 +35,24 @@ import re
 import sys
 from pathlib import Path
 
+import yaml
+
 sys.path.insert(0, os.path.dirname(__file__))
-import paths  # noqa: E402
+import paths
 
 # 版面門檻（英吋）。投影片高 5.63"，這些值來自實測而非猜測。
-HEADER_MAX_TOP = 0.35      # 這條線以上是頁首
-TITLE_MAX_TOP = 1.60       # 標題落在頁首與照片之間；再低就是查驗重點或日期戳
+HEADER_MAX_TOP = 0.35  # 這條線以上是頁首
+TITLE_MAX_TOP = 1.60  # 標題落在頁首與照片之間；再低就是查驗重點或日期戳
 # 標題長度上限。實測最長「9F~3F落地窗玻璃安裝」11 字；放寬到 30 吸收異常寫法，
 # 超過就是段落（週工作排程、其他施工概述）而非工項。
 TITLE_MAX_LEN = 30
-MIN_PIXELS = 200 * 200     # 小於這個的圖是 logo / 圖示，不是工地照
+MIN_PIXELS = 200 * 200  # 小於這個的圖是 logo / 圖示，不是工地照
 
 # 不是工項的標題。這些投影片有照片也有短標題，但拍的是表格或文件。
 TITLE_JUNK = re.compile(
     r"進度報告|進度匯報|進度表|週工作|工作排程|巡檢表|公工需求|其他施工|其他概述|"
-    r"本日工種|本日出工|出工統計|建照|竣工|展延|會議|通知|備忘|附件|目錄")
+    r"本日工種|本日出工|出工統計|建照|竣工|展延|會議|通知|備忘|附件|目錄"
+)
 # 純數字/日期/頁碼
 NOT_TEXT = re.compile(r"^[\d\s./~年月日:\-]+$")
 INSP_HEAD = re.compile(r"^查驗重點\s*[:：]?")
@@ -122,9 +126,8 @@ def date_from_name(text: str) -> str | None:
 # ——簡稱與全名是同一個案場，不併起來就會一邊進 train 一邊進 test。
 # 工地名別名表 = 公司案場資訊，2026-09-01 起外移 reference/site_aliases.yaml（不入 git）。
 # 缺檔時不套別名（舊檔名照原樣解析），行為與「沒有別名可套」一致。
-import yaml as _yaml
 try:
-    SITE_ALIAS = _yaml.safe_load((paths.ROOT / "reference" / "site_aliases.yaml").read_text()) or {}
+    SITE_ALIAS = yaml.safe_load((paths.ROOT / "reference" / "site_aliases.yaml").read_text()) or {}
 except FileNotFoundError:
     SITE_ALIAS = {}
 
@@ -144,7 +147,7 @@ def site_from(header: str, fname: str) -> str:
 def _iter_shapes(shapes):
     """遞迴展開群組。群組裡的照片與文字都要算，不展開會漏掉整張投影片。"""
     for sh in shapes:
-        if sh.shape_type == 6:                     # MSO_SHAPE_TYPE.GROUP
+        if sh.shape_type == 6:  # MSO_SHAPE_TYPE.GROUP
             yield from _iter_shapes(sh.shapes)
         else:
             yield sh
@@ -154,7 +157,7 @@ def parse_slide(slide, emu_to_in):
     """一張投影片 → (頁首, 工項標題, 查驗重點[], 圖片blob[])。標題為 None 表示不是工項頁。"""
     header, cands, insp, pics = "", [], [], []
     for sh in _iter_shapes(slide.shapes):
-        if sh.shape_type == 13:                    # PICTURE
+        if sh.shape_type == 13:  # PICTURE
             pics.append(sh)
             continue
         if not getattr(sh, "has_text_frame", False):
@@ -167,8 +170,11 @@ def parse_slide(slide, emu_to_in):
             header = txt
             continue
         if INSP_HEAD.match(txt):
-            insp = [re.sub(r"^\d+\s*[.、]\s*", "", ln).strip()
-                    for ln in INSP_HEAD.sub("", txt).splitlines() if ln.strip()]
+            insp = [
+                re.sub(r"^\d+\s*[.、]\s*", "", ln).strip()
+                for ln in INSP_HEAD.sub("", txt).splitlines()
+                if ln.strip()
+            ]
             continue
         if top <= TITLE_MAX_TOP:
             cands.append((top, txt))
@@ -176,15 +182,25 @@ def parse_slide(slide, emu_to_in):
     title = None
     for _, txt in sorted(cands):
         one = re.sub(r"\s+", "", txt)
-        if (len(one) <= TITLE_MAX_LEN and "\n" not in txt
-                and not NOT_TEXT.match(one) and not TITLE_JUNK.search(one)):
+        if (
+            len(one) <= TITLE_MAX_LEN
+            and "\n" not in txt
+            and not NOT_TEXT.match(one)
+            and not TITLE_JUNK.search(one)
+        ):
             title = one
             break
     return header, title, insp, pics
 
 
-def run(root: str, out_dir: Path | None = None, limit: int = 0, dry: bool = False,
-        skip_pms_dupes: bool = True, log=print) -> dict:
+def run(
+    root: str,
+    out_dir: Path | None = None,
+    limit: int = 0,
+    dry: bool = False,
+    skip_pms_dupes: bool = True,
+    log=print,
+) -> dict:
     from PIL import Image
     from pptx import Presentation
     from pptx.util import Emu
@@ -201,10 +217,23 @@ def run(root: str, out_dir: Path | None = None, limit: int = 0, dry: bool = Fals
         files = files[:limit]
     log(f"{len(files)} 個 pptx（{root_p}）")
 
-    rows, seen, byhash, stat = [], {}, {}, {
-        "pptx": len(files), "pptxFailed": 0, "slides": 0, "workItemSlides": 0,
-        "photos": 0, "dupPhotos": 0, "dupVisual": 0, "dupWithPms": 0,
-        "tinySkipped": 0, "noTitleSlides": 0}
+    rows, seen, byhash, stat = (
+        [],
+        {},
+        {},
+        {
+            "pptx": len(files),
+            "pptxFailed": 0,
+            "slides": 0,
+            "workItemSlides": 0,
+            "photos": 0,
+            "dupPhotos": 0,
+            "dupVisual": 0,
+            "dupWithPms": 0,
+            "tinySkipped": 0,
+            "noTitleSlides": 0,
+        },
+    )
 
     for n, f in enumerate(files, 1):
         try:
@@ -260,13 +289,23 @@ def run(root: str, out_dir: Path | None = None, limit: int = 0, dry: bool = Fals
                     dst = photos / f"{fid}.{'jpg' if ext in ('jpeg', 'jpg') else ext}"
                     if not dst.exists():
                         dst.write_bytes(blob)
-                rows.append({
-                    "fileId": fid, "source": "legacy", "dhash": dh, "title": title,
-                    "inspPoints": json.dumps(insp, ensure_ascii=False) if insp else "",
-                    "reportDate": rdate, "constrName": site,
-                    "natW": w, "natH": h, "ext": ext,
-                    "pptx": str(f.relative_to(root_p)), "slide": si, "serial": serial,
-                })
+                rows.append(
+                    {
+                        "fileId": fid,
+                        "source": "legacy",
+                        "dhash": dh,
+                        "title": title,
+                        "inspPoints": json.dumps(insp, ensure_ascii=False) if insp else "",
+                        "reportDate": rdate,
+                        "constrName": site,
+                        "natW": w,
+                        "natH": h,
+                        "ext": ext,
+                        "pptx": str(f.relative_to(root_p)),
+                        "slide": si,
+                        "serial": serial,
+                    }
+                )
         if n % 50 == 0:
             log(f"  {n}/{len(files)}  照片 {stat['photos']}")
 
@@ -283,7 +322,8 @@ def run(root: str, out_dir: Path | None = None, limit: int = 0, dry: bool = Fals
         # 去重統計只有抽取時算得出來（manifest 只留下活著的那些）。存起來，
         # 操作台才講得出「擋掉多少、靠什麼擋的」，不然那些數字就只活在 log 裡。
         (out / "raw" / "stats.json").write_text(
-            json.dumps({"root": str(root_p), "stat": stat}, ensure_ascii=False, indent=1))
+            json.dumps({"root": str(root_p), "stat": stat}, ensure_ascii=False, indent=1)
+        )
     log(f"統計：{stat}")
     return {"stat": stat, "rows": rows}
 
@@ -316,8 +356,10 @@ def stats(rows=None, log=print) -> dict:
     sites = collections.Counter(r["constrName"] for r in rows)
     log(f"\n工地：{dict(sites)}")
     dates = [r["reportDate"] for r in rows if r["reportDate"]]
-    log(f"日期範圍：{min(dates) if dates else '-'} ~ {max(dates) if dates else '-'}"
-        f"（{len(set(dates))} 天，{len(rows) - len(dates)} 張無日期）")
+    log(
+        f"日期範圍：{min(dates) if dates else '-'} ~ {max(dates) if dates else '-'}"
+        f"（{len(set(dates))} 天，{len(rows) - len(dates)} 張無日期）"
+    )
     return {"byClass": dict(cnt), "titles": len(titles), "sites": dict(sites)}
 
 
@@ -327,12 +369,10 @@ if __name__ == "__main__":
     ap.add_argument("--limit", type=int, default=0, help="只處理前 N 個 pptx（試跑用）")
     ap.add_argument("--dry-run", action="store_true", help="只統計，不寫任何檔")
     ap.add_argument("--stats", action="store_true", help="對已抽出的 manifest 算類別分佈")
-    ap.add_argument("--keep-pms-dupes", action="store_true",
-                    help="不擋與 PMS 畫面重複的照片（預設會擋）")
+    ap.add_argument("--keep-pms-dupes", action="store_true", help="不擋與 PMS 畫面重複的照片（預設會擋）")
     a = ap.parse_args()
     if a.stats:
         stats()
     else:
-        r = run(a.root, limit=a.limit, dry=a.dry_run,
-                skip_pms_dupes=not a.keep_pms_dupes)
+        r = run(a.root, limit=a.limit, dry=a.dry_run, skip_pms_dupes=not a.keep_pms_dupes)
         stats(r["rows"])

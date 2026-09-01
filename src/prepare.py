@@ -10,6 +10,7 @@ SPEC §7.2 的鐵律：前處理必須與標籤完全無關。
 
     uv run src/prepare.py [--force]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,13 +26,13 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 sys.path.insert(0, os.path.dirname(__file__))
 import paths  # noqa: E402
 
-CORNER_W, CORNER_H = 0.30, 0.12   # 日報膠囊：四角
+CORNER_W, CORNER_H = 0.30, 0.12  # 日報膠囊：四角
 # QMS 浮水印：實測 x 2%~52% / y 65%~97%，烤死在原檔上，沒有乾淨版本。
 # 留 margin 吸收機型解析度差異。
-WATERMARK = (0.0, 0.60, 0.56, 1.0)   # (x0, y0, x1, y1) 比例
+WATERMARK = (0.0, 0.60, 0.56, 1.0)  # (x0, y0, x1, y1) 比例
 LONG_EDGE = 512
 FILL = (127, 127, 127)
-CLEAN_FROM = "2026-08-14"   # 這天起日報照存乾淨 raw，畫面上不再有膠囊
+CLEAN_FROM = "2026-08-14"  # 這天起日報照存乾淨 raw，畫面上不再有膠囊
 
 
 def clean_ids() -> set[str]:
@@ -43,12 +44,12 @@ def clean_ids() -> set[str]:
     if not paths.MANIFEST.exists():
         return set()
     with open(paths.MANIFEST, newline="", encoding="utf-8") as f:
-        return {r["fileId"] for r in csv.DictReader(f)
-                if CLEAN_FROM <= r["reportDate"] <= r["syncedAt"][:10]}
+        return {r["fileId"] for r in csv.DictReader(f) if CLEAN_FROM <= r["reportDate"] <= r["syncedAt"][:10]}
 
 
-def mask_corners(im: Image.Image, w_frac: float = CORNER_W, h_frac: float = CORNER_H,
-                 fill=FILL) -> Image.Image:
+def mask_corners(
+    im: Image.Image, w_frac: float = CORNER_W, h_frac: float = CORNER_H, fill=FILL
+) -> Image.Image:
     """日報：四角膠囊 + 右下日期標籤。"""
     w, h = im.size
     cw, ch = int(w * w_frac), int(h * h_frac)
@@ -94,7 +95,7 @@ def process(src, dst, kind: str = "report", mask: bool = True) -> None:
 def run(force: bool = False, kind: str = "report", log=print) -> dict:
     paths.ensure_dirs()
     src_dir, out_dir = SRC_DIRS[kind]
-    clean = clean_ids() if kind == "report" else set()   # QMS 浮水印照樣烤死，全遮
+    clean = clean_ids() if kind == "report" else set()  # QMS 浮水印照樣烤死，全遮
     done = skipped = failed = unmasked = 0
     for src in sorted(src_dir.iterdir()):
         if not src.is_file() or src.name.startswith("."):
@@ -119,8 +120,7 @@ def run(force: bool = False, kind: str = "report", log=print) -> dict:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true")
-    ap.add_argument("--src", default="report",
-                    choices=["report", "qms", "legacy", "all"])
+    ap.add_argument("--src", default="report", choices=["report", "qms", "legacy", "all"])
     a = ap.parse_args()
-    for k in (list(SRC_DIRS) if a.src == "all" else [a.src]):
+    for k in list(SRC_DIRS) if a.src == "all" else [a.src]:
         run(a.force, k)

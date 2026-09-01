@@ -12,6 +12,7 @@
 不重算任何東西、不讀模型，純粹讀已經生成的報告——所以隨時可以跑，
 也可以在刪掉舊 report 之後跑（那一版就從紀錄裡消失，這是刻意的）。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,7 +24,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(__file__))
-import paths  # noqa: E402
+import paths
 
 # evaluate.py 寫的檔名：真{true}_猜{pred}_{fileId[:8]}.jpg
 # 非貪婪 + 尾端固定 8 碼，才不會把 hash 的前幾碼算進標籤裡
@@ -51,33 +52,39 @@ def load_runs() -> list[dict]:
         # 舊算法存的（support=0 的幽靈類別以 f1=0 計入平均），直接比會把指標 bug
         # 當成模型退步。現算才能讓 26 個歷史 run 跟新的擺在同一張表上。
         real = [v["f1-score"] for v in per.values() if v.get("support", 0) > 0]
-        runs.append({
-            "name": d.name,
-            "when": datetime.fromtimestamp(mf.stat().st_mtime),
-            "split": cfg.get("split", "?"),
-            "labels": cfg.get("labelsVersion", "?"),
-            "top1": m.get("top1"),
-            "macroF1": round(sum(real) / len(real), 4) if real else None,
-            "storedMacroF1": m.get("macroF1"),
-            "ghosts": sorted(k for k, v in per.items() if v.get("support", 0) == 0),
-            "support": m.get("support"),
-            "perClass": per,
-            "errs": [p for p in (parse_err(e.name) for e in errs) if p],
-        })
+        runs.append(
+            {
+                "name": d.name,
+                "when": datetime.fromtimestamp(mf.stat().st_mtime),
+                "split": cfg.get("split", "?"),
+                "labels": cfg.get("labelsVersion", "?"),
+                "top1": m.get("top1"),
+                "macroF1": round(sum(real) / len(real), 4) if real else None,
+                "storedMacroF1": m.get("macroF1"),
+                "ghosts": sorted(k for k, v in per.items() if v.get("support", 0) == 0),
+                "support": m.get("support"),
+                "perClass": per,
+                "errs": [p for p in (parse_err(e.name) for e in errs) if p],
+            }
+        )
     runs.sort(key=lambda r: r["when"])
     return runs
 
 
 def history_table(runs: list[dict]) -> str:
-    out = ["| 完成 | run | split | labels | 測試張數 | top1 | macroF1 | 類數 | Δtop1 | 測不到的類 |",
-           "|---|---|---|---|---|---|---|---|---|---|"]
+    out = [
+        "| 完成 | run | split | labels | 測試張數 | top1 | macroF1 | 類數 | Δtop1 | 測不到的類 |",
+        "|---|---|---|---|---|---|---|---|---|---|",
+    ]
     prev = None
     for r in runs:
         d = "" if prev is None else f"{r['top1'] - prev:+.4f}"
         n = len([v for v in r["perClass"].values() if v.get("support", 0) > 0])
         g = "、".join(r["ghosts"]) if r["ghosts"] else ""
-        out.append(f"| {r['when']:%m-%d %H:%M} | {r['name']} | {r['split']} | "
-                   f"{r['labels']} | {r['support']} | {r['top1']} | {r['macroF1']} | {n} | {d} | {g} |")
+        out.append(
+            f"| {r['when']:%m-%d %H:%M} | {r['name']} | {r['split']} | "
+            f"{r['labels']} | {r['support']} | {r['top1']} | {r['macroF1']} | {n} | {d} | {g} |"
+        )
         prev = r["top1"]
     return "\n".join(out)
 
@@ -104,21 +111,24 @@ def class_delta(cur: dict, prev: dict, eps: float = 0.005) -> str:
             sup = f"{a[k]['support']:.0f}"
             if a[k]["support"] != b[k]["support"]:
                 sup += f"（上版 {b[k]['support']:.0f}）"
-            rows.append((d, f"| {k} | {b[k]['f1-score']:.3f} | {a[k]['f1-score']:.3f} "
-                            f"| {d:+.3f} | {sup} |"))
+            rows.append((d, f"| {k} | {b[k]['f1-score']:.3f} | {a[k]['f1-score']:.3f} | {d:+.3f} | {sup} |"))
     if not rows:
         return "兩版 per-class F1 差異都在 ±0.005 內。"
     rows.sort(key=lambda x: -x[0])
-    return "\n".join(["| 類別 | 上一版 F1 | 這一版 F1 | Δ | support |", "|---|---|---|---|---|"]
-                     + [r[1] for r in rows])
+    return "\n".join(
+        ["| 類別 | 上一版 F1 | 這一版 F1 | Δ | support |", "|---|---|---|---|---|"] + [r[1] for r in rows]
+    )
 
 
 def weakest(run: dict, n: int = 6) -> str:
     rows = sorted(_real(run["perClass"]).items(), key=lambda kv: kv[1]["f1-score"])[:n]
     return "\n".join(
         ["| 類別 | f1 | precision | recall | support |", "|---|---|---|---|---|"]
-        + [f"| {k} | {v['f1-score']:.3f} | {v['precision']:.3f} | {v['recall']:.3f} "
-           f"| {v['support']:.0f} |" for k, v in rows])
+        + [
+            f"| {k} | {v['f1-score']:.3f} | {v['precision']:.3f} | {v['recall']:.3f} | {v['support']:.0f} |"
+            for k, v in rows
+        ]
+    )
 
 
 def repeats(runs: list[dict], min_runs: int = 2) -> str:
@@ -132,8 +142,10 @@ def repeats(runs: list[dict], min_runs: int = 2) -> str:
     if not hit:
         return f"沒有混淆在 {min_runs} 個以上的 run 重複出現。"
     hit.sort(reverse=True)
-    return "\n".join(["| 真 → 猜 | 出現在幾個 run |", "|---|---|"]
-                     + [f"| {k[0]} → {k[1]} | {v} / {len(runs)} |" for v, k in hit[:20]])
+    return "\n".join(
+        ["| 真 → 猜 | 出現在幾個 run |", "|---|---|"]
+        + [f"| {k[0]} → {k[1]} | {v} / {len(runs)} |" for v, k in hit[:20]]
+    )
 
 
 def chronic(runs: list[dict], min_runs: int = 3) -> str:
@@ -146,8 +158,10 @@ def chronic(runs: list[dict], min_runs: int = 3) -> str:
     if not hit:
         return f"沒有照片連錯 {min_runs} 個 run 以上。"
     hit.sort(reverse=True)
-    return "\n".join(["| fileId 前 8 碼 | 錯了幾個 run | 最近一次 |", "|---|---|---|"]
-                     + [f"| `{k}` | {n} | {v[-1]} |" for n, k, v in hit[:20]])
+    return "\n".join(
+        ["| fileId 前 8 碼 | 錯了幾個 run | 最近一次 |", "|---|---|---|"]
+        + [f"| `{k}` | {n} | {v[-1]} |" for n, k, v in hit[:20]]
+    )
 
 
 def build(last: int = 12) -> str:
@@ -166,8 +180,7 @@ def build(last: int = 12) -> str:
         "",
         history_table(runs),
         "",
-        f"## 二、最新這版學到／退步了什麼（{cur['name']} vs "
-        f"{runs[-2]['name'] if len(runs) > 1 else '無'}）",
+        f"## 二、最新這版學到／退步了什麼（{cur['name']} vs {runs[-2]['name'] if len(runs) > 1 else '無'}）",
         "",
         class_delta(cur, runs[-2]) if len(runs) > 1 else "只有一個 run，沒有可比對象。",
         "",
@@ -211,12 +224,17 @@ def write(last: int = 12) -> str:
 
 def demo() -> None:
     assert parse_err("真泥作-地磚貼飾_猜油漆-批土塗裝_0e2b86ad.jpg") == (
-        "泥作-地磚貼飾", "油漆-批土塗裝", "0e2b86ad")
+        "泥作-地磚貼飾",
+        "油漆-批土塗裝",
+        "0e2b86ad",
+    )
     assert parse_err("confusion.png") is None
-    assert parse_err("真A_猜B_1234567.jpg") is None      # hash 不是 8 碼 → 不認
-    runs = [{"split": "v1", "errs": [("A", "B", "aaaaaaaa"), ("A", "B", "bbbbbbbb")]},
-            {"split": "v2", "errs": [("A", "B", "aaaaaaaa")]}]
-    assert "2 / 2" in repeats(runs)                       # 同 run 內重複只算一次
+    assert parse_err("真A_猜B_1234567.jpg") is None  # hash 不是 8 碼 → 不認
+    runs = [
+        {"split": "v1", "errs": [("A", "B", "aaaaaaaa"), ("A", "B", "bbbbbbbb")]},
+        {"split": "v2", "errs": [("A", "B", "aaaaaaaa")]},
+    ]
+    assert "2 / 2" in repeats(runs)  # 同 run 內重複只算一次
     assert "`aaaaaaaa`" in chronic(runs, min_runs=2)
     assert "沒有照片" in chronic(runs, min_runs=3)
     a = {"perClass": {"X": {"f1-score": 0.9, "precision": 1.0, "recall": 0.8, "support": 10.0}}}
@@ -228,10 +246,9 @@ def demo() -> None:
     ghost = {"f1-score": 0.0, "precision": 0.0, "recall": 0.0, "support": 0.0}
     g = {"perClass": {**a["perClass"], "防水": ghost}}
     assert _real(g["perClass"]).keys() == {"X"}
-    assert "防水" not in weakest(g)                       # 否則 f1=0 會排到第一名
-    assert "都在 ±0.005 內" in class_delta(g, a)          # 幽靈不算「新類別」
-    assert "測不到" in class_delta(a, {"perClass": {**a["perClass"],
-                                                    "Y": {**ghost, "support": 3.0}}})
+    assert "防水" not in weakest(g)  # 否則 f1=0 會排到第一名
+    assert "都在 ±0.005 內" in class_delta(g, a)  # 幽靈不算「新類別」
+    assert "測不到" in class_delta(a, {"perClass": {**a["perClass"], "Y": {**ghost, "support": 3.0}}})
     print("ok journal")
 
 

@@ -9,13 +9,14 @@ Clause/ContractDoc、core/labeler.py 的 Labeler）。
 避免同一個概念存在兩份形狀不同的 dataclass（舊示範版 ContractClause 用
 clause_no，真實版用 no——兩份並存必然漂移）。
 """
+
 from __future__ import annotations
 
-from core.contractdata import Clause as ContractClause  # noqa: F401
-from core.contractdata import ContractDoc as ContractDocument  # noqa: F401
-from core.labeler import Labeler  # noqa: F401
-from core.qs_data import Doc as QS_Doc  # noqa: F401
-from core.qs_data import Item as CoreItem  # noqa: F401
-from core.qs_data import Item as QS_Item  # noqa: F401
+from core.contractdata import Clause as ContractClause
+from core.contractdata import ContractDoc as ContractDocument
+from core.labeler import Labeler
+from core.qs_data import Doc as QS_Doc
+from core.qs_data import Item as CoreItem
+from core.qs_data import Item as QS_Item
 
-__all__ = ["CoreItem", "QS_Item", "QS_Doc", "ContractClause", "ContractDocument", "Labeler"]
+__all__ = ["ContractClause", "ContractDocument", "CoreItem", "Labeler", "QS_Doc", "QS_Item"]

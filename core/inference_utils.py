@@ -8,19 +8,22 @@ embedding 在 data/derived/features/{model_key}.npz（src/features.py 產出）�
 推理前處理的契約在 src/predict.py（與訓練的 eval_tf 逐步一致）——本檔只做
 「讀現成的、算分數」，不重新實作特徵抽取。
 """
+
 from __future__ import annotations
 
-import sys as _sys
 import os as _os
+import sys as _sys
 
-for _p in (_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-           _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src")):
+for _p in (
+    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+    _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src"),
+):
     if _p not in _sys.path:
         _sys.path.insert(0, _p)
 
 import json  # noqa: E402
 import pickle  # noqa: E402
-from typing import Any, Optional, Tuple  # noqa: E402
+from typing import Any, Optional  # noqa: E402
 
 import numpy as np  # noqa: E402
 
@@ -62,13 +65,18 @@ def scores(model_key: str = "siglip", split_name: str = "") -> tuple[dict, set]:
         return {}, set()
     p = clf.predict_proba(z["emb"])
     top = np.sort(p, axis=1)
-    return ({f: (clf.classes_[i], float(top[n, -1]), float(top[n, -1] - top[n, -2]))
-             for n, (f, i) in enumerate(zip(z["fileIds"].tolist(), p.argmax(1)))}, test)
+    return (
+        {
+            f: (clf.classes_[i], float(top[n, -1]), float(top[n, -1] - top[n, -2]))
+            for n, (f, i) in enumerate(zip(z["fileIds"].tolist(), p.argmax(1)))
+        },
+        test,
+    )
 
 
-def get_heatmaps(file_id: str, model_key: str = "siglip",
-                 split_name: str = "") -> Tuple[Optional[np.ndarray], Optional[Any],
-                                                 Optional[float], Optional[str]]:
+def get_heatmaps(
+    file_id: str, model_key: str = "siglip", split_name: str = ""
+) -> tuple[Optional[np.ndarray], Optional[Any], Optional[float], Optional[str]]:
     """遮擋法熱區（explanation）。
 
     實體在 src/explain.py（probe_cam：遮一格 → 重編碼 → 看答案掉多少）。
@@ -87,6 +95,7 @@ if __name__ == "__main__":
     print(f"features dir: {paths.FEATURES} exists={paths.FEATURES.exists()}")
     print(f"models dir:   {paths.MODELS} exists={paths.MODELS.exists()}")
     import split as split_mod
+
     cur = split_mod.current() if paths.SPLITS.exists() else "v1"
     sc, test = scores("siglip", cur)
     print(f"split={cur} · embeddings scored: {len(sc)} · test ids: {len(test)}")

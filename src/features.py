@@ -5,6 +5,7 @@
 
     uv run --extra train src/features.py [--model siglip]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -14,7 +15,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
-import paths  # noqa: E402
+import paths
 
 MODELS = {
     # open_clip 名稱 → (model, pretrained)
@@ -23,19 +24,18 @@ MODELS = {
 }
 
 
-SRC = {"report": ("images", ""), "qms": ("qms_images", "qms-"),
-       "legacy": ("legacy_images", "legacy-")}
+SRC = {"report": ("images", ""), "qms": ("qms_images", "qms-"), "legacy": ("legacy_images", "legacy-")}
 
 
-def extract(model_key: str = "siglip", batch: int = 32, src: str = "report",
-            force: bool = False, log=print) -> str:
+def extract(
+    model_key: str = "siglip", batch: int = 32, src: str = "report", force: bool = False, log=print
+) -> str:
     import open_clip  # 重相依，用到才載
     import torch
     from PIL import Image
 
     paths.ensure_dirs()
-    img_dir = {"report": paths.IMAGES, "qms": paths.QMS_IMAGES,
-               "legacy": paths.LEGACY_IMAGES}[src]
+    img_dir = {"report": paths.IMAGES, "qms": paths.QMS_IMAGES, "legacy": paths.LEGACY_IMAGES}[src]
     out = paths.FEATURES / f"{SRC[src][1]}{model_key}.npz"
     files = sorted(p for p in img_dir.glob("*.jpg"))
     if not files:
@@ -54,7 +54,7 @@ def extract(model_key: str = "siglip", batch: int = 32, src: str = "report",
         model, _, preprocess = open_clip.create_model_and_transforms(name, pretrained=pretrained)
         model = model.to(dev).eval()
         for i in range(0, len(todo), batch):
-            chunk = todo[i:i + batch]
+            chunk = todo[i : i + batch]
             x = torch.stack([preprocess(Image.open(f).convert("RGB")) for f in chunk]).to(dev)
             with torch.no_grad():
                 v = model.encode_image(x)
@@ -69,8 +69,7 @@ def extract(model_key: str = "siglip", batch: int = 32, src: str = "report",
     return str(out)
 
 
-def extract_crops(model_key: str = "siglip", batch: int = 32, force: bool = False,
-                  log=print) -> str:
+def extract_crops(model_key: str = "siglip", batch: int = 32, force: bool = False, log=print) -> str:
     """人標的框 → 裁切 → embedding。id 是 `{fileId}#{i}`，只當**額外的訓練樣本**。
 
     為什麼這樣用框：線性探針吃的是整張圖的 embedding，框塞不進去。但把框裡那塊
@@ -115,13 +114,12 @@ def extract_crops(model_key: str = "siglip", batch: int = 32, force: bool = Fals
         model, _, preprocess = open_clip.create_model_and_transforms(name, pretrained=pretrained)
         model = model.to(dev).eval()
         for i in range(0, len(todo), batch):
-            chunk = todo[i:i + batch]
+            chunk = todo[i : i + batch]
             ims = []
             for _, src, b in chunk:
                 im = Image.open(src).convert("RGB")
                 w, h = im.size
-                ims.append(im.crop((b[0] / 1000 * w, b[1] / 1000 * h,
-                                    b[2] / 1000 * w, b[3] / 1000 * h)))
+                ims.append(im.crop((b[0] / 1000 * w, b[1] / 1000 * h, b[2] / 1000 * w, b[3] / 1000 * h)))
             x = torch.stack([preprocess(im) for im in ims]).to(dev)
             with torch.no_grad():
                 v = model.encode_image(x)
@@ -134,8 +132,11 @@ def extract_crops(model_key: str = "siglip", batch: int = 32, force: bool = Fals
     live = {f"{f}#{i}" for f, bs in boxes.items() for i in range(len(bs))}
     have = {k: v for k, v in have.items() if k in live}
     ids = sorted(have)
-    np.savez(out, fileIds=np.array(ids), emb=np.stack([have[i] for i in ids])
-             if ids else np.zeros((0, 768), dtype=np.float32))
+    np.savez(
+        out,
+        fileIds=np.array(ids),
+        emb=np.stack([have[i] for i in ids]) if ids else np.zeros((0, 768), dtype=np.float32),
+    )
     log(f"寫入 {out}（{len(ids)} 個裁切）")
     return str(out)
 
@@ -158,13 +159,12 @@ def load(model_key: str = "siglip") -> tuple[list[str], np.ndarray]:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="siglip", choices=list(MODELS))
-    ap.add_argument("--src", default="report",
-                    choices=["report", "qms", "legacy", "all"])
+    ap.add_argument("--src", default="report", choices=["report", "qms", "legacy", "all"])
     ap.add_argument("--force", action="store_true", help="影像重做過就要加這個")
     ap.add_argument("--crops", action="store_true", help="改成抽人標框裡那塊的 embedding")
     a = ap.parse_args()
     if a.crops:
         extract_crops(a.model, force=a.force)
     else:
-        for s in (list(SRC) if a.src == "all" else [a.src]):
+        for s in list(SRC) if a.src == "all" else [a.src]:
             extract(a.model, src=s, force=a.force)

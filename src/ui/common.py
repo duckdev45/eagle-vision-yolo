@@ -3,6 +3,7 @@
 這些函式被多個分頁共用，放最上層而非某個分頁裡——分頁的程式碼會因為
 「那批資料還沒有」而整段跳過，樣式跟著消失的話其他分頁的卡片會裸奔。
 """
+
 from __future__ import annotations
 
 import io
@@ -67,7 +68,7 @@ def txt(v) -> str:
 
 def verdict(label: str, p, truth) -> str:
     if p is None or p != p:
-        return f'<div class=m>{label}：－</div>'
+        return f"<div class=m>{label}：－</div>"
     return f'<div class={"ok" if p == truth else "no"}">{label}：{p}</div>'
 
 
@@ -79,13 +80,15 @@ def gem_line(raw, norm, truth, conf_s: str = "") -> str:
     ——那不是它答錯，是我們沒有那個類別可以接。
     """
     if raw is None or raw != raw or not str(raw).strip():
-        return '<div class=m>Gemini判斷：－</div>'
+        return "<div class=m>Gemini判斷：－</div>"
     cls_ = "ok" if norm == truth else "no"
     tail = " ·類別外" if norm == "類別外" else ""
-    return (f'<div class={cls_} title="{txt(raw)}">Gemini判斷：{txt(raw)}{conf_s}'
-            f'<span class=m>{tail}</span></div>')
+    return (
+        f'<div class={cls_} title="{txt(raw)}">Gemini判斷：{txt(raw)}{conf_s}'
+        f"<span class=m>{tail}</span></div>"
+    )
 
 
 def badge(part: str) -> str:
     """test 紅、其餘綠：紅色代表「模型沒背過，這些才算數」。"""
-    return (f'<span class="bdg {"te" if part == "test" else "tr"}">{part.upper()}</span>')
+    return f'<span class="bdg {"te" if part == "test" else "tr"}">{part.upper()}</span>'

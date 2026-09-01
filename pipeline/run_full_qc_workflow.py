@@ -9,13 +9,15 @@ V2.0 草稿期這裡全是 `lambda: True` 假步驟；2026-09-01 起接上真實
 刻意**不**在這裡重新實作訓練：src/split.py 等腳本已是被 33+ 個測試守著的真實
 流程，orchestrator 的職責是「調度與回報」，不是把邏輯抄第二份。
 """
+
 from __future__ import annotations
 
 import os
 import subprocess
 import sys
 import time
-from typing import Any, Callable, Tuple
+from collections.abc import Callable
+from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # root
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
@@ -25,7 +27,7 @@ from core.data_loader import load_full_system_snapshot
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def run_pipeline_step(step_name: str, step_func: Callable, *args, **kwargs) -> Tuple[bool, Any, str]:
+def run_pipeline_step(step_name: str, step_func: Callable, *args, **kwargs) -> tuple[bool, Any, str]:
     """統一執行單一步驟。回傳 (Success, Result, Message)。"""
     print(f"\n🚀 [PIPELINE] {step_name} ...")
     try:
@@ -51,20 +53,24 @@ def snapshot() -> dict:
 def queue(split_name: str = "") -> Any:
     """複核佇列（真實分層）：待人工裁決的照片，照 tier 排序。"""
     import pandas as pd
+
     from core.review_utils import build, scores
     from labels import Labeler, human_refs, load_reviews
 
     labeler = Labeler.load()
     import paths as _p
+
     if not _p.MANIFEST.exists():
         return pd.DataFrame()
     from sync import _truthy
+
     df = pd.read_csv(_p.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
     if "active" in df:
         df = df[_truthy(df.active)]
     df = labeler.apply(df)
     df = df.join(human_refs(df, labeler))
     import split as split_mod
+
     sc, test_ids = scores("siglip", split_name or split_mod.current())
     q = build(df, labeler, sc, test_ids)
     done = set(load_reviews())
@@ -77,12 +83,20 @@ def get_workflow_status(stage: str) -> Any:
         return queue().head(20)
     if stage == "report_status":
         import paths as _p
+
         rows = []
         for j in sorted(_p.REPORTS_OUT.glob("*/config.json")):
             import json
+
             cfg = json.loads(j.read_text())
-            rows.append({"run": j.parent.name, "split": cfg.get("split"),
-                         "model": cfg.get("model"), "labels": cfg.get("labelsVersion")})
+            rows.append(
+                {
+                    "run": j.parent.name,
+                    "split": cfg.get("split"),
+                    "model": cfg.get("model"),
+                    "labels": cfg.get("labelsVersion"),
+                }
+            )
         return rows
     return {}
 
@@ -113,14 +127,16 @@ def run_full_qc_workflow(stage: str, split_name: str = "v1", with_data: bool = F
 
     elif stage in ("model", "full_run"):
         if with_data or stage == "full_run":
-            ok, _, msg = run_pipeline_step("S1-S3 sync→prepare→features", _sub,
-                                           [sys.executable, "src/sync.py"])
+            ok, _, msg = run_pipeline_step(
+                "S1-S3 sync→prepare→features", _sub, [sys.executable, "src/sync.py"]
+            )
             results["details"].append(msg)
             if not ok:
                 results["status"] = "FAILED_DATA"
                 return results
-        ok, _, msg = run_pipeline_step(f"S4-7 model 鏈（split={split_name}）", _sub,
-                                       ["make", "model", f"SPLIT={split_name}"])
+        ok, _, msg = run_pipeline_step(
+            f"S4-7 model 鏈（split={split_name}）", _sub, ["make", "model", f"SPLIT={split_name}"]
+        )
         results["details"].append(msg)
         results["status"] = "WORKFLOW_COMPLETED_SUCCESS" if ok else "FAILED_MODEL"
 

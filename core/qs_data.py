@@ -15,13 +15,16 @@
 
 刻意不依賴 pandas/torch：這層要能在任何環境跑（含只裝基本相依的 CI）。
 """
+
 from __future__ import annotations
 
-import sys as _sys
 import os as _os
+import sys as _sys
 
-for _p in (_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-           _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src")):
+for _p in (
+    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+    _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src"),
+):
     if _p not in _sys.path:
         _sys.path.insert(0, _p)
 
@@ -42,18 +45,26 @@ PHASES_OUT = paths.ROOT / "reference" / "iso" / "phases.yaml"
 #   佔比過高就別拿它當統計依據，要人工複核。
 RULES: list[tuple[str, str, str]] = [
     # (類型, 說明, regex)
-    ("E", "儀器試驗",
-     r"試驗|抗壓|氯離子|坍度|扭力|水壓|蓄水|非破壞|試水|含水率|強度.*試|試.*強度"),
-    ("C", "文件憑證",
-     r"證明|證照|報告|圖說|圖審|樣品|簽認|計劃書|計畫書|名冊|技術資料|合約|採發"
-     r"|規範|出廠|CNS|認可|核准|審核|存查|備查|提送"),
-    ("D", "時序流程",
-     r"每月|每半月|每日|天後|小時|分鐘|日內|週內|一週|之前|先行|完成後|時機"
-     r"|同時|再行|方可|後方|次數|定期"),
-    ("B", "量測數值",
-     r"\d+\s*(?:mm|cm|m²|m2|kg|µ|%|度|公分|公尺|米|倍|分|寸)"
-     r"|誤差|間距|厚度|坡度|垂直度|水平|高程|尺寸|長度|直徑|深度|寬度|重量"
-     r"|不超過|不得小於|不得大於|以上|以下|至少"),
+    ("E", "儀器試驗", r"試驗|抗壓|氯離子|坍度|扭力|水壓|蓄水|非破壞|試水|含水率|強度.*試|試.*強度"),
+    (
+        "C",
+        "文件憑證",
+        r"證明|證照|報告|圖說|圖審|樣品|簽認|計劃書|計畫書|名冊|技術資料|合約|採發"
+        r"|規範|出廠|CNS|認可|核准|審核|存查|備查|提送",
+    ),
+    (
+        "D",
+        "時序流程",
+        r"每月|每半月|每日|天後|小時|分鐘|日內|週內|一週|之前|先行|完成後|時機"
+        r"|同時|再行|方可|後方|次數|定期",
+    ),
+    (
+        "B",
+        "量測數值",
+        r"\d+\s*(?:mm|cm|m²|m2|kg|µ|%|度|公分|公尺|米|倍|分|寸)"
+        r"|誤差|間距|厚度|坡度|垂直度|水平|高程|尺寸|長度|直徑|深度|寬度|重量"
+        r"|不超過|不得小於|不得大於|以上|以下|至少",
+    ),
 ]
 UNSURE = "A"  # 落不到上面任何一條 → 純視覺（最可能是 VLM 能吃的）
 
@@ -66,7 +77,7 @@ CONTRACT_RE = re.compile(r"合約|採發|圖說|圖審|樣品|簽認|工作約�
 class Item:
     doc_no: str
     item_no: str
-    status: str          # "O" = 階段節點 / "R" = 檢查項
+    status: str  # "O" = 階段節點 / "R" = 檢查項
     name: str
 
     @property
@@ -123,8 +134,7 @@ class Doc:
         **不自動當成階段**——列出來讓人決定，免得靜默猜錯。
         """
         has_child = {i.item_no.rsplit(".", 1)[0] for i in self.items if i.depth > 1}
-        return [i for i in self.items
-                if i.status == "R" and i.depth == 1 and i.item_no not in has_child]
+        return [i for i in self.items if i.status == "R" and i.depth == 1 and i.item_no not in has_child]
 
     @property
     def shape(self) -> str:
@@ -156,10 +166,11 @@ def load(raw_dir: Path = RAW_DIR) -> dict[str, Doc]:
                         f"  新增：{cur.name}（{cur.iso_info_id}）\n"
                         f"  → 兩份不同標準搶同一個編號。dict 會靜默覆蓋，所以這裡直接擋下。\n"
                         f"  若確定是兩份不同文件，其中一份要用消歧碼（如 {cur.doc_no}B），"
-                        f"並在 catalog.yaml 的 conflicts 區塊記錄原因。")
+                        f"並在 catalog.yaml 的 conflicts 區塊記錄原因。"
+                    )
                 docs[cur.doc_no] = cur
                 continue
-            if line.startswith("#"):        # 註解
+            if line.startswith("#"):  # 註解
                 continue
             p = line.split("\t")
             if len(p) < 3:
@@ -243,8 +254,7 @@ def report(docs=None, log=print) -> None:
     docs = docs or load()
     items = all_items(docs)
     req = [i for i in items if i.status == "R"]
-    log(f"標準 {len(docs)} 份 / 節點 {len(items)}（REQUIRED {len(req)} · OPTIONAL "
-        f"{len(items) - len(req)}）")
+    log(f"標準 {len(docs)} 份 / 節點 {len(items)}（REQUIRED {len(req)} · OPTIONAL {len(items) - len(req)}）")
 
     log("\n── 工序型態 ──")
     shapes = Counter(d.shape for d in docs.values())
@@ -258,9 +268,9 @@ def report(docs=None, log=print) -> None:
     for tag in "ABCDE":
         n = ks.get(tag, 0)
         bar = "█" * round(n / max(ks.values()) * 28) if ks else ""
-        log(f"  {tag} {names.get(tag,''):<6} {n:>4} ({n/len(req)*100:4.1f}%) {bar}")
+        log(f"  {tag} {names.get(tag, ''):<6} {n:>4} ({n / len(req) * 100:4.1f}%) {bar}")
     vision = ks.get("A", 0) + ks.get("B", 0)
-    log(f"  → vision 守備範圍 A+B = {vision}/{len(req)} ({vision/len(req)*100:.1f}%)")
+    log(f"  → vision 守備範圍 A+B = {vision}/{len(req)} ({vision / len(req) * 100:.1f}%)")
 
     log("\n── 請款照片靶（明文須拍照存證）──")
     for i in billing_items(docs):
@@ -309,19 +319,22 @@ def self_check() -> int:
 
     # 階層深度：QS0203 連續壁有三層（2.2.2.1）
     d = docs.get("QS0203")
-    ck(d is not None and max(i.depth for i in d.items) >= 4,
-       "QS0203 解析出 4 層階層（2.2.2.1）")
+    ck(d is not None and max(i.depth for i in d.items) >= 4, "QS0203 解析出 4 層階層（2.2.2.1）")
 
     # QS0501 油漆：3 個 O 節點（補土/整平磨平/底漆面漆）+ 1 個孤兒（清潔）
     d = docs["QS0501"]
     ck(len(d.phases) == 3, f"QS0501 有 3 個 OPTIONAL 階段（實得 {len(d.phases)}）")
-    ck(any("清潔" in o.name for o in d.orphan_depth1_required),
-       "QS0501「1 清潔」被列為 orphan 而非靜默當成階段")
+    ck(
+        any("清潔" in o.name for o in d.orphan_depth1_required),
+        "QS0501「1 清潔」被列為 orphan 而非靜默當成階段",
+    )
 
     # QS0402 泥作粉刷：完全扁平，32 項
     d = docs["QS0402"]
-    ck(d.shape == "C" and len(d.required) == 32,
-       f"QS0402 扁平且 32 項（shape={d.shape} R={len(d.required)}）")
+    ck(
+        d.shape == "C" and len(d.required) == 32,
+        f"QS0402 扁平且 32 項（shape={d.shape} R={len(d.required)}）",
+    )
 
     # 主鍵格式。注意 required 的順序是 API 回傳序（非排序），所以用查找不用索引
     it = next(i for i in docs["QS0404"].required if "10~15mm" in i.name)
@@ -330,15 +343,20 @@ def self_check() -> int:
     # 請款項：明文「須拍照存證，做為請款之憑證」。全庫應為 8 項。
     b = billing_items(docs)
     ck(len(b) >= 5, f"請款照片項 ≥5（實得 {len(b)}）")
-    ck({i.doc_no for i in b} <= {"QS0301", "QS0302", "QS0303", "QS0606",
-                                 "QS0701", "QS0907B"},
-       "請款項落在結構工程／門窗／防水／機電")
+    ck(
+        {i.doc_no for i in b} <= {"QS0301", "QS0302", "QS0303", "QS0606", "QS0701", "QS0907B"},
+        "請款項落在結構工程／門窗／防水／機電",
+    )
 
     # 分派：厚度項該是 B，出廠證明該是 C
-    ck(next(i for i in docs["QS0404"].required if "10~15mm" in i.name).kind == "B",
-       "「粘貼厚度10~15mm」分派到 B 量測")
-    ck(next(i for i in docs["QS0501"].required if "出廠証明" in i.name).kind == "C",
-       "「材料進場是否附出廠証明」分派到 C 文件")
+    ck(
+        next(i for i in docs["QS0404"].required if "10~15mm" in i.name).kind == "B",
+        "「粘貼厚度10~15mm」分派到 B 量測",
+    )
+    ck(
+        next(i for i in docs["QS0501"].required if "出廠証明" in i.name).kind == "C",
+        "「材料進場是否附出廠証明」分派到 C 文件",
+    )
 
     # 罰則
     ck(len(penalty_items(docs)) >= 2, f"罰則項 ≥2（實得 {len(penalty_items(docs))}）")
@@ -346,9 +364,11 @@ def self_check() -> int:
     # QS0104 施工電梯：2026-08-27 對過公司系統 API 全量 dump，22/22 項逐字一致。
     # 這裡只驗證項數與階段數，不是重跑那次比對——真正的驗證是那次人工核對本身。
     d = docs.get("QS0104")
-    ck(d is not None and len(d.required) == 14 and len(d.phases) == 8,
-       f"QS0104 施工電梯 14R+8O（實得 R={len(d.required) if d else '?'} "
-       f"O={len(d.phases) if d else '?'}）—— 已比對公司 API 全量 dump 逐字一致")
+    ck(
+        d is not None and len(d.required) == 14 and len(d.phases) == 8,
+        f"QS0104 施工電梯 14R+8O（實得 R={len(d.required) if d else '?'} "
+        f"O={len(d.phases) if d else '?'}）—— 已比對公司 API 全量 dump 逐字一致",
+    )
 
     # ── catalog.yaml ↔ raw/ 一致性 ──────────────────────────────────
     # 2026-08-28 的教訓：爬蟲重建 raw/ 時把「停車場排風」寫成 QS0907，
@@ -358,6 +378,7 @@ def self_check() -> int:
     cat_path = paths.ROOT / "reference" / "iso" / "catalog.yaml"
     if cat_path.exists():
         import yaml
+
         cat = yaml.safe_load(cat_path.read_text(encoding="utf-8"))
         entries = cat.get("docs", [])
         cat_ids = {}
@@ -368,40 +389,55 @@ def self_check() -> int:
                 dupes.append(dn)
             cat_ids[dn] = e
 
-        ck(not dupes,
-           f"catalog.yaml 無重複 docNo（重複：{sorted(set(dupes))}）"
-           if dupes else "catalog.yaml 無重複 docNo")
+        ck(
+            not dupes,
+            f"catalog.yaml 無重複 docNo（重複：{sorted(set(dupes))}）"
+            if dupes
+            else "catalog.yaml 無重複 docNo",
+        )
 
         only_cat = sorted(set(cat_ids) - set(docs))
         only_raw = sorted(set(docs) - set(cat_ids))
-        ck(not only_cat and not only_raw,
-           f"catalog ↔ raw 份數對齊（僅目錄有：{only_cat[:5]}；僅內容有：{only_raw[:5]}）"
-           if (only_cat or only_raw) else "catalog ↔ raw 份數對齊")
+        ck(
+            not only_cat and not only_raw,
+            f"catalog ↔ raw 份數對齊（僅目錄有：{only_cat[:5]}；僅內容有：{only_raw[:5]}）"
+            if (only_cat or only_raw)
+            else "catalog ↔ raw 份數對齊",
+        )
 
         # isoInfoId 是身分證：docNo 可能被人記錯，UUID 不會
-        mismatch = [(k, docs[k].iso_info_id[:8], cat_ids[k]["id"][:8])
-                    for k in docs if k in cat_ids
-                    and docs[k].iso_info_id != cat_ids[k]["id"]]
-        ck(not mismatch,
-           f"isoInfoId 全部一致（不符 {len(mismatch)} 份：{mismatch[:3]}）"
-           if mismatch else "isoInfoId 全部一致")
+        mismatch = [
+            (k, docs[k].iso_info_id[:8], cat_ids[k]["id"][:8])
+            for k in docs
+            if k in cat_ids and docs[k].iso_info_id != cat_ids[k]["id"]
+        ]
+        ck(
+            not mismatch,
+            f"isoInfoId 全部一致（不符 {len(mismatch)} 份：{mismatch[:3]}）"
+            if mismatch
+            else "isoInfoId 全部一致",
+        )
 
     # QS0907 編號歸屬（2026-08-28 定案，見 catalog.yaml 的 numbering 區塊）：
     #   QS0907  = 電梯工程標準（PDF 原件，7 查驗項）
     #   QS0907B = 停車場排風（本專案固定編號，非待確認狀態）
     # 這兩條是正向斷言不是警告——編號已定，任何一邊被改動都該讓測試失敗。
     d = docs.get("QS0907")
-    ck(d is not None and len(d.required) == 7 and "電梯" in d.name,
-       f"QS0907 = 電梯工程標準 7 項（實得 {d.name if d else '缺'} "
-       f"{len(d.required) if d else 0} 項）")
+    ck(
+        d is not None and len(d.required) == 7 and "電梯" in d.name,
+        f"QS0907 = 電梯工程標準 7 項（實得 {d.name if d else '缺'} {len(d.required) if d else 0} 項）",
+    )
 
     d2 = docs.get("QS0907B")
-    ck(d2 is not None and "排風" in d2.name,
-       f"QS0907B = 停車場排風（實得 {d2.name if d2 else '缺'}）"
-       "——本專案固定編號，勿改回 QS0907")
+    ck(
+        d2 is not None and "排風" in d2.name,
+        f"QS0907B = 停車場排風（實得 {d2.name if d2 else '缺'}）——本專案固定編號，勿改回 QS0907",
+    )
 
-    print(f"\n{'✓ 全部通過' if not bad else f'✗ {bad} 項失敗'}"
-          + (f"（另有 {warn} 項待辦警告，不計入失敗）" if warn else ""))
+    print(
+        f"\n{'✓ 全部通過' if not bad else f'✗ {bad} 項失敗'}"
+        + (f"（另有 {warn} 項待辦警告，不計入失敗）" if warn else "")
+    )
     return bad
 
 

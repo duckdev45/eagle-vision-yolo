@@ -3,6 +3,7 @@
 全部走 Streamlit cache（以檔案 mtime 當 key），分頁模組只呼叫、不重寫——
 同一份資料在三個分頁出現時只讀一次磁碟。
 """
+
 from __future__ import annotations
 
 import json
@@ -39,8 +40,7 @@ def labeled() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def local_preds(model_key: str = "siglip",
-                split_name: str = "") -> tuple[dict, set]:
+def local_preds(model_key: str = "siglip", split_name: str = "") -> tuple[dict, set]:
     """{fileId: 本地模型預測}, {測試集 fileId}。缺模型或特徵就回空的。
 
     訓練集照片的預測是它自己背過的，偏樂觀，所以要標出來。
@@ -48,6 +48,7 @@ def local_preds(model_key: str = "siglip",
     import pickle
 
     import numpy as np
+
     try:
         z = np.load(paths.FEATURES / f"{model_key}.npz", allow_pickle=True)
         with (paths.MODELS / f"probe-{model_key}-{split_name}.pkl").open("rb") as f:
@@ -62,6 +63,7 @@ def local_preds(model_key: str = "siglip",
 def _qms(_mtime: float) -> pd.DataFrame:
     """QMS manifest + 中類標籤 + ONNX 預測（有的話）。"""
     import qms
+
     try:
         df = qms.labeled()
     except FileNotFoundError:

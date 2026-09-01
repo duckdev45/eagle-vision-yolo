@@ -6,6 +6,7 @@ ONNX 單張 CPU 19ms，2000 張約 40 秒，跑一次存起來就好。
 
     uv run --extra train src/predict.py --ckpt backbone-qms --src qms
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,7 +19,7 @@ import pandas as pd
 from PIL import Image
 
 sys.path.insert(0, os.path.dirname(__file__))
-import paths  # noqa: E402
+import paths
 
 SIZE = 224
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -50,7 +51,7 @@ def run(ckpt: str = "backbone-qms", src: str = "qms", batch: int = 32, log=print
     files = sorted(img_dir.glob("*.jpg"))
     rows = []
     for i in range(0, len(files), batch):
-        chunk = files[i:i + batch]
+        chunk = files[i : i + batch]
         x = np.stack([preprocess(f) for f in chunk])
         logits = sess.run(None, {"image": x})[0]
         e = np.exp(logits - logits.max(1, keepdims=True))

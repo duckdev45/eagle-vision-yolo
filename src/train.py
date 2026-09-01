@@ -5,6 +5,7 @@
 
     uv run --extra train src/train.py --probe [--split v1] [--model siglip]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -16,9 +17,9 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
-import features  # noqa: E402
-import paths  # noqa: E402
-import split as split_mod  # noqa: E402
+import features
+import paths
+import split as split_mod
 
 
 def dataset(split_name: str, model_key: str):
@@ -57,7 +58,8 @@ def probe(split_name: str = "v1", model_key: str = "siglip", C: float = DEFAULT_
     acc = float((clf.predict(xte) == yte).mean()) if len(yte) else float("nan")
     log(f"test top-1 = {acc:.3f} → {out}")
     (paths.MODELS / f"probe-{model_key}-{split_name}.json").write_text(
-        json.dumps({"top1": acc, "classes": list(clf.classes_), "C": C}, ensure_ascii=False))
+        json.dumps({"top1": acc, "classes": list(clf.classes_), "C": C}, ensure_ascii=False)
+    )
     return clf, acc, (xte, yte, ids_te)
 
 

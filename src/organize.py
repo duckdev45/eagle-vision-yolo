@@ -7,6 +7,7 @@ raw/photos/ 刻意是平的一坨 {fileId}.{ext}（SPEC §2.1：raw 不可變、
     uv run src/organize.py            # 建三種視圖
     uv run src/organize.py --copy     # 要拷貝實體檔（給非本機的人）
 """
+
 from __future__ import annotations
 
 import argparse
@@ -16,15 +17,15 @@ import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-import paths  # noqa: E402
-from labels import labeled_manifest  # noqa: E402
+import paths
+from labels import labeled_manifest
 
 BAD = re.compile(r'[/\\:*?"<>|\n\r\t]+')
 
 
 def safe(s, fallback="_") -> str:
     s = BAD.sub("_", str(s or "")).strip().strip(".")
-    return (s[:60] or fallback)
+    return s[:60] or fallback
 
 
 def _src(file_id: str):
@@ -48,11 +49,19 @@ def build(copy: bool = False, log=print) -> dict:
         serial = f"{int(r.serial or 0):02d}"
         targets = [
             # 每天各工地的日報 → 頁 → 照片
-            paths.TREE / "by-date" / safe(r.reportDate) / safe(r.constrName or r.constrId)
-            / page / f"{serial}-{r.fileId}{src.suffix}",
+            paths.TREE
+            / "by-date"
+            / safe(r.reportDate)
+            / safe(r.constrName or r.constrId)
+            / page
+            / f"{serial}-{r.fileId}{src.suffix}",
             # 同一工地的時間軸
-            paths.TREE / "by-site" / safe(r.constrName or r.constrId) / safe(r.reportDate)
-            / page / f"{serial}-{r.fileId}{src.suffix}",
+            paths.TREE
+            / "by-site"
+            / safe(r.constrName or r.constrId)
+            / safe(r.reportDate)
+            / page
+            / f"{serial}-{r.fileId}{src.suffix}",
             # 標籤視圖：核對 labels.yaml 分得對不對，一眼掃完一類
             paths.TREE / "by-class" / safe(r.cls) / f"{r.fileId}{src.suffix}",
         ]

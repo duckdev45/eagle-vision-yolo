@@ -17,13 +17,16 @@
 
 ⚠ 這層的資料**逐案有效**。任何查詢都必須帶 project 或明確接受「跨案通用」的風險。
 """
+
 from __future__ import annotations
 
-import sys as _sys
 import os as _os
+import sys as _sys
 
-for _p in (_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-           _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src")):
+for _p in (
+    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+    _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src"),
+):
     if _p not in _sys.path:
         _sys.path.insert(0, _p)
 
@@ -50,12 +53,12 @@ UNSURE = "other"
 
 @dataclass
 class Clause:
-    project: str          # 所屬案（與 QS 分開的主鍵軸）
-    trade: str            # 工種，如「泥作工程」
-    vendor: str           # 承包廠商
-    doc_date: str         # 文件日期
-    sheet: str            # 來源分頁，如「工約」
-    no: str               # 條號，如「38」或「61(3)」
+    project: str  # 所屬案（與 QS 分開的主鍵軸）
+    trade: str  # 工種，如「泥作工程」
+    vendor: str  # 承包廠商
+    doc_date: str  # 文件日期
+    sheet: str  # 來源分頁，如「工約」
+    no: str  # 條號，如「38」或「61(3)」
     text: str
 
     @property
@@ -82,7 +85,7 @@ class ContractDoc:
     trade: str
     vendor: str
     doc_date: str
-    kind: str             # 工明（施工）/ 物明（材料供應）
+    kind: str  # 工明（施工）/ 物明（材料供應）
     clauses: list[Clause] = field(default_factory=list)
     note: str = ""
 
@@ -106,10 +109,14 @@ def load(raw_dir: Path = RAW_DIR) -> list[ContractDoc]:
                 p = line.split("\t")
                 if len(p) < 6:
                     raise ValueError(f"{fp.name}:{ln} #DOC 欄位不足")
-                cur = ContractDoc(project=p[1].strip(), trade=p[2].strip(),
-                                  vendor=p[3].strip(), doc_date=p[4].strip(),
-                                  kind=p[5].strip(),
-                                  note=p[6].strip() if len(p) > 6 else "")
+                cur = ContractDoc(
+                    project=p[1].strip(),
+                    trade=p[2].strip(),
+                    vendor=p[3].strip(),
+                    doc_date=p[4].strip(),
+                    kind=p[5].strip(),
+                    note=p[6].strip() if len(p) > 6 else "",
+                )
                 docs.append(cur)
                 continue
             if line.startswith("#"):
@@ -119,9 +126,11 @@ def load(raw_dir: Path = RAW_DIR) -> list[ContractDoc]:
                 raise ValueError(f"{fp.name}:{ln} 欄位不足：{line[:60]!r}")
             if cur is None:
                 raise ValueError(f"{fp.name}:{ln} 條文出現在 #DOC 之前")
-            cur.clauses.append(Clause(cur.project, cur.trade, cur.vendor,
-                                      cur.doc_date, p[1].strip(), p[0].strip(),
-                                      p[2].strip()))
+            cur.clauses.append(
+                Clause(
+                    cur.project, cur.trade, cur.vendor, cur.doc_date, p[1].strip(), p[0].strip(), p[2].strip()
+                )
+            )
     return docs
 
 
@@ -155,6 +164,7 @@ def load_mappings() -> dict:
     if not MAPPINGS.exists():
         return {"QS_ANSWERS": {}, "TRADE_TO_QS": {}, "INTERFACES": []}
     import yaml
+
     return yaml.safe_load(MAPPINGS.read_text(encoding="utf-8")) or {}
 
 
@@ -214,15 +224,19 @@ def cross_check(docs=None, qs_docs=None) -> list[dict]:
             if qdoc_no not in qd:
                 continue
             for topic, pat in CONFLICT_TOPICS.items():
-                qs_hits = [i for i in qd[qdoc_no].required
-                           if re.search(pat, i.name) and _NUM.search(i.name)]
-                c_hits = [c for c in d.clauses
-                          if re.search(pat, c.text) and _NUM.search(c.text)]
+                qs_hits = [i for i in qd[qdoc_no].required if re.search(pat, i.name) and _NUM.search(i.name)]
+                c_hits = [c for c in d.clauses if re.search(pat, c.text) and _NUM.search(c.text)]
                 if qs_hits and c_hits:
-                    out.append({"trade": d.trade, "project": d.project,
-                                "qsDoc": qdoc_no, "topic": topic,
-                                "qs": [(i.key, i.name) for i in qs_hits],
-                                "contract": [(c.key, c.text) for c in c_hits]})
+                    out.append(
+                        {
+                            "trade": d.trade,
+                            "project": d.project,
+                            "qsDoc": qdoc_no,
+                            "topic": topic,
+                            "qs": [(i.key, i.name) for i in qs_hits],
+                            "contract": [(c.key, c.text) for c in c_hits],
+                        }
+                    )
     return out
 
 
@@ -233,20 +247,23 @@ def report(docs=None, log=print) -> None:
 
     log("\n── 各份摘要 ──")
     for d in docs:
-        log(f"  {d.project:<8} {d.trade:<12} {d.vendor:<6} {d.doc_date:<10} "
-            f"{d.kind:<4} {len(d.clauses):>3} 條  {d.note}")
+        log(
+            f"  {d.project:<8} {d.trade:<12} {d.vendor:<6} {d.doc_date:<10} "
+            f"{d.kind:<4} {len(d.clauses):>3} 條  {d.note}"
+        )
 
     log("\n── 條款分類 ──")
     from collections import Counter
+
     ks = Counter(c.kind for c in cs)
     names = {t: n for t, n, _ in KINDS}
     names[UNSURE] = "其他"
     mx = max(ks.values()) if ks else 1
-    for tag, _, _ in KINDS + [(UNSURE, "", "")]:
+    for tag, _, _ in [*KINDS, (UNSURE, "", "")]:
         n = ks.get(tag, 0)
         if not n:
             continue
-        log(f"  {names.get(tag, tag):<6} {n:>3} ({n/len(cs)*100:4.1f}%) {'█' * round(n/mx*24)}")
+        log(f"  {names.get(tag, tag):<6} {n:>3} ({n / len(cs) * 100:4.1f}%) {'█' * round(n / mx * 24)}")
 
     log(f"\n── 付款節點 {len(payment_terms(docs))} 條（L5 判定的輸入）──")
     for c in payment_terms(docs)[:8]:
@@ -293,8 +310,10 @@ def self_check() -> int:
 
     # 泥作那份 64 條是最完整的
     ni = [d for d in docs if d.trade == "泥作工程"]
-    ck(len(ni) == 1 and len(ni[0].clauses) >= 60,
-       f"泥作工約 ≥60 條（實得 {len(ni[0].clauses) if ni else 0}）")
+    ck(
+        len(ni) == 1 and len(ni[0].clauses) >= 60,
+        f"泥作工約 ≥60 條（實得 {len(ni[0].clauses) if ni else 0}）",
+    )
 
     # 主鍵格式帶案名
     c = cs[0]
@@ -307,17 +326,20 @@ def self_check() -> int:
 
     # 鋼筋那份是物明不是工明——這個區分很重要，不能當成施工工約用
     st = [d for d in docs if "鋼筋" in d.trade]
-    ck(bool(st) and st[0].kind == "物明",
-       "鋼筋那份標記為「物明」（材料供應），非施工工約")
+    ck(bool(st) and st[0].kind == "物明", "鋼筋那份標記為「物明」（材料供應），非施工工約")
 
     # 防水：合約明文要求照片存證，這是 vision 的靶
     wp = [d for d in docs if d.trade == "防水工程"]
     ck(bool(wp), "防水工程工約已落地")
     if wp:
-        ck(any("照相存證" in c.text for c in wp[0].clauses),
-           "防水 14(b)「每一道施工完成應照相存證」——合約層級的請款照片要求")
-        ck(any("不同顏色" in c.text for c in wp[0].clauses),
-           "防水 15「每度施工需使用不同顏色塗佈」——可用顏色判斷施作到第幾度")
+        ck(
+            any("照相存證" in c.text for c in wp[0].clauses),
+            "防水 14(b)「每一道施工完成應照相存證」——合約層級的請款照片要求",
+        )
+        ck(
+            any("不同顏色" in c.text for c in wp[0].clauses),
+            "防水 15「每度施工需使用不同顏色塗佈」——可用顏色判斷施作到第幾度",
+        )
 
     ifs = load_mappings().get("INTERFACES", [])
     qa = load_mappings().get("QS_ANSWERS", {})
@@ -325,23 +347,26 @@ def self_check() -> int:
     # 介面條款：跨工種配對必須解析得到
     for it in ifs:
         got = interface_clauses(it["name"], docs)
-        ck(len(got) == len(it["clauses"]),
-           f"介面「{it['name']}」解析得到 {len(got)}/{len(it['clauses'])} 條")
+        ck(len(got) == len(it["clauses"]), f"介面「{it['name']}」解析得到 {len(got)}/{len(it['clauses'])} 條")
 
     # QS 交叉引用要指得到真實條款
     for qk in qa:
         got = answers_qs(qk)
-        ck(len(got) == len(qa[qk]),
-           f"{qk} 的合約對應解析得到 {len(got)}/{len(qa[qk])} 條")
+        ck(len(got) == len(qa[qk]), f"{qk} 的合約對應解析得到 {len(got)}/{len(qa[qk])} 條")
 
     from core import qs_data
-    n_ci = len(qs_data.contract_items(qs_data.load()))
-    warn_if(len(qa) < n_ci,
-            f"qsdata 有 {n_ci} 項合約相依，目前只對應了 {len(qa)} 項"
-            "——其餘待更多合約落地（尤其 QS0302-5 鋼筋綁紮，現有那份是材料供應非施工）")
 
-    print(f"\n{'✓ 全部通過' if not bad else f'✗ {bad} 項失敗'}"
-          + (f"（另有 {warn} 項待辦警告）" if warn else ""))
+    n_ci = len(qs_data.contract_items(qs_data.load()))
+    warn_if(
+        len(qa) < n_ci,
+        f"qsdata 有 {n_ci} 項合約相依，目前只對應了 {len(qa)} 項"
+        "——其餘待更多合約落地（尤其 QS0302-5 鋼筋綁紮，現有那份是材料供應非施工）",
+    )
+
+    print(
+        f"\n{'✓ 全部通過' if not bad else f'✗ {bad} 項失敗'}"
+        + (f"（另有 {warn} 項待辦警告）" if warn else "")
+    )
     return bad
 
 
@@ -351,8 +376,9 @@ def main(argv: list[str] | None = None) -> int:
 
     ap = argparse.ArgumentParser(prog="contractdata")
     ap.add_argument("--self-check", action="store_true")
-    ap.add_argument("--conflicts", action="store_true",
-                    help="同工種內 QS vs 合約的數值衝突候選（需人工判定）")
+    ap.add_argument(
+        "--conflicts", action="store_true", help="同工種內 QS vs 合約的數值衝突候選（需人工判定）"
+    )
     a = ap.parse_args(argv)
     if a.self_check:
         return 1 if self_check() else 0
@@ -366,8 +392,7 @@ def main(argv: list[str] | None = None) -> int:
             for k, t in r["contract"]:
                 print(f"   合約 {k.split('/')[-1]:<14} {t[:58]}")
             print()
-        print("⚠ 這是候選不是結論。已人工確認的三處衝突見 "
-              "reference/contract/CONTRACT_VS_QS.md")
+        print("⚠ 這是候選不是結論。已人工確認的三處衝突見 reference/contract/CONTRACT_VS_QS.md")
     else:
         report()
     return 0

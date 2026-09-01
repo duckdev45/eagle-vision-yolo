@@ -16,27 +16,27 @@
 
     uv run --extra train src/audit.py [--split v1] [--model siglip]
 """
+
 from __future__ import annotations
 
 import argparse
 import json
 import os
 import pickle
-import shutil
 import sys
 from datetime import date
 
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(__file__))
-import boxes  # noqa: E402
-import paths  # noqa: E402
-import split as split_mod  # noqa: E402
-from labels import Labeler  # noqa: E402
+import boxes
+import paths
+import split as split_mod
+from labels import Labeler
 
 # 佐證框大到這個比例以上，等於「整張圖都是證據」——沒有定位，證據力當作零
 BIG_BOX = 0.80
-MANUAL_REVIEW = 10   # 排給人工目視的張數（框有沒有框到人，沒有自動判法）
+MANUAL_REVIEW = 10  # 排給人工目視的張數（框有沒有框到人，沒有自動判法）
 
 CODES = {
     "A": "標籤可疑：local 與 Gemini 都判成同一個別的類別",
@@ -122,25 +122,29 @@ def build(split_name: str = "v1", model_key: str = "siglip", log=print) -> pd.Da
         m = man.loc[f] if f in man.index else None
         gem = _norm(labeler, valid, m.predWorkItem if m is not None else None)
         sec = _secondary(labeler, valid, m.predSecondary if m is not None else None)
-        rows.append({
-            "fileId": f,
-            "title": m.title if m is not None else None,
-            "truth": cls[f],
-            "gemini": gem,
-            "geminiRaw": m.predWorkItem if m is not None else None,
-            "geminiConf": m.predConf if m is not None else None,
-            "secondary": "|".join(sec),
-            "local": p,
-            "localProba": round(float(pr), 3) if pr is not None else None,
-            "maxBoxArea": round(boxes.area(m.predBoxes if m is not None else None), 3),
-            "promptVersion": m.promptVersion if m is not None else None,
-            "hit": p == cls[f],
-        })
+        rows.append(
+            {
+                "fileId": f,
+                "title": m.title if m is not None else None,
+                "truth": cls[f],
+                "gemini": gem,
+                "geminiRaw": m.predWorkItem if m is not None else None,
+                "geminiConf": m.predConf if m is not None else None,
+                "secondary": "|".join(sec),
+                "local": p,
+                "localProba": round(float(pr), 3) if pr is not None else None,
+                "maxBoxArea": round(boxes.area(m.predBoxes if m is not None else None), 3),
+                "promptVersion": m.promptVersion if m is not None else None,
+                "hit": p == cls[f],
+            }
+        )
     df = pd.DataFrame(rows)
-    df["code"] = ["" if r.hit else
-                  code(r.truth, r.gemini, r.secondary.split("|") if r.secondary else [],
-                       r.local, labeler.fallback)
-                  for r in df.itertuples()]
+    df["code"] = [
+        ""
+        if r.hit
+        else code(r.truth, r.gemini, r.secondary.split("|") if r.secondary else [], r.local, labeler.fallback)
+        for r in df.itertuples()
+    ]
     log(f"測試集 {len(df)} 張，判錯 {int((~df.hit).sum())} 張")
     return df
 
@@ -156,39 +160,48 @@ def summarize(df: pd.DataFrame) -> str:
         k = int((wrong.code == c).sum())
         out.append(f"| {c} | {desc} | {k} | {k / n:.0%} |")
 
-    out += ["", "## 各類別（依錯誤數排序）", "",
-            "| 真值類別 | 測試張數 | 判錯 | " + " | ".join(CODES) + " |",
-            "|---|---|---|" + "---|" * len(CODES)]
+    out += [
+        "",
+        "## 各類別（依錯誤數排序）",
+        "",
+        "| 真值類別 | 測試張數 | 判錯 | " + " | ".join(CODES) + " |",
+        "|---|---|---|" + "---|" * len(CODES),
+    ]
     for c, g in sorted(df.groupby("truth"), key=lambda kv: -int((~kv[1].hit).sum())):
         w = g[~g.hit]
         cnt = {k: int((w.code == k).sum()) for k in CODES}
-        out.append(f"| {c} | {len(g)} | {len(w)} | " +
-                   " | ".join(str(cnt[k]) for k in CODES) + " |")
+        out.append(f"| {c} | {len(g)} | {len(w)} | " + " | ".join(str(cnt[k]) for k in CODES) + " |")
 
     gap = wrong[wrong.code == "R"]
     if len(gap):
-        out += ["", "## 規則漏接的 Gemini 原文（R）", "",
-                "Gemini 講了具體工項，`labels.yaml` 沒有對應規則所以落到 fallback。"
-                "這一段是規則要補什麼的直接清單。", "",
-                "| Gemini 原文 | 現在的真值 | 張數 |", "|---|---|---|"]
-        for (raw, t), g in sorted(gap.groupby(["geminiRaw", "truth"]),
-                                  key=lambda kv: -len(kv[1])):
+        out += [
+            "",
+            "## 規則漏接的 Gemini 原文（R）",
+            "",
+            "Gemini 講了具體工項，`labels.yaml` 沒有對應規則所以落到 fallback。"
+            "這一段是規則要補什麼的直接清單。",
+            "",
+            "| Gemini 原文 | 現在的真值 | 張數 |",
+            "|---|---|---|",
+        ]
+        for (raw, t), g in sorted(gap.groupby(["geminiRaw", "truth"]), key=lambda kv: -len(kv[1])):
             out.append(f"| {raw} | {t} | {len(g)} |")
 
     out += ["", "## 錯誤流向（真值 → local 判成什麼）", ""]
-    for (t, p), g in sorted(wrong.groupby(["truth", "local"]),
-                            key=lambda kv: -len(kv[1]))[:12]:
+    for (t, p), g in sorted(wrong.groupby(["truth", "local"]), key=lambda kv: -len(kv[1]))[:12]:
         out.append(f"- {t} → **{p}** ×{len(g)}（{'/'.join(sorted(set(g.code)))}）")
 
     has = df[df.maxBoxArea > 0]
     out += ["", f"## 佐證框（{len(has)} 張有框）", ""]
     if len(has):
         big = int((has.maxBoxArea >= BIG_BOX).sum())
-        out += [f"- 最大框面積中位數 **{has.maxBoxArea.median():.0%}**",
-                f"- 框住 ≥{BIG_BOX:.0%} 畫面的有 **{big} 張（{big / len(has):.0%}）**"
-                "——那種框等於沒定位，它的 workItem 證據力要打折",
-                f"- `manual_review/` 放了面積最大的 {MANUAL_REVIEW} 張（已畫框）。"
-                "「有沒有框到人」沒有自動判法，要人眼看。"]
+        out += [
+            f"- 最大框面積中位數 **{has.maxBoxArea.median():.0%}**",
+            f"- 框住 ≥{BIG_BOX:.0%} 畫面的有 **{big} 張（{big / len(has):.0%}）**"
+            "——那種框等於沒定位，它的 workItem 證據力要打折",
+            f"- `manual_review/` 放了面積最大的 {MANUAL_REVIEW} 張（已畫框）。"
+            "「有沒有框到人」沒有自動判法，要人眼看。",
+        ]
     else:
         out.append("- 測試集內沒有任何佐證框")
     return "\n".join(out) + "\n"
@@ -211,7 +224,8 @@ def run(split_name: str = "v1", model_key: str = "siglip", log=print) -> str:
         src = paths.IMAGES / f"{r.fileId}.jpg"
         if src.exists():
             boxes.draw(str(src), man.predBoxes.get(r.fileId)).save(
-                review / f"{r.maxBoxArea:.0%}_{r.truth}_{r.fileId[:8]}.jpg", "JPEG", quality=90)
+                review / f"{r.maxBoxArea:.0%}_{r.truth}_{r.fileId[:8]}.jpg", "JPEG", quality=90
+            )
 
     log(f"稽核 → {outdir}")
     return str(outdir)

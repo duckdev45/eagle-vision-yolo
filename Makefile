@@ -14,7 +14,7 @@ SPLIT_FLAGS := $(if $(LEGACY),--with-legacy,) \
                $(if $(MIN_TRAIN),--min-train $(MIN_TRAIN),) \
                $(if $(LEGACY_FILL),--legacy-fill $(LEGACY_FILL),)
 
-.PHONY: help retrain model data cams test app sync use legacy journal queue newclass qs qs-phases
+.PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases
 
 help:
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/'
@@ -81,6 +81,14 @@ test: ## 自檢（含 QS 資料層 + 合約資料層；reference/ 為公司資�
 	else echo "⚠ reference/ 不在（公司資料不入 git）——跳過 QS 自檢"; fi
 	@if [ -d reference/contract/raw ]; then uv run src/contractdata.py --self-check; \
 	else echo "⚠ reference/ 不在（公司資料不入 git）——跳過合約自檢"; fi
+
+lint: ## Ruff lint + format 檢查（CI 用：只查不改）
+	uv run ruff check .
+	uv run ruff format --check .
+
+fmt: ## Ruff 一鍵修正（lint --fix + format；改動自行 review）
+	uv run ruff check . --fix
+	uv run ruff format .
 
 app: ## 操作台
 	$(TRAIN) streamlit run src/app.py

@@ -1,4 +1,5 @@
 """報告分頁 —— PMS 與 QMS 共用同一份報告格式。"""
+
 from __future__ import annotations
 
 import json
@@ -14,8 +15,7 @@ def report_view(runs, key: str):
     pick = st.selectbox("run", runs, format_func=lambda p: p.name, key=key)
     if (pick / "comparison.md").exists():
         st.markdown((pick / "comparison.md").read_text())
-    m = json.loads((pick / "metrics.json").read_text()) \
-        if (pick / "metrics.json").exists() else {}
+    m = json.loads((pick / "metrics.json").read_text()) if (pick / "metrics.json").exists() else {}
     if m:
         a, b, c = st.columns(3)
         a.metric("top-1", m["top1"])
@@ -23,14 +23,25 @@ def report_view(runs, key: str):
         c.metric("測試張數", m["support"])
         if m.get("coverageCurve"):
             st.caption("信心門檻 → 自動處理比例與該批準確率（決定何時能少靠人工）")
-            st.dataframe(pd.DataFrame(m["coverageCurve"]).rename(columns={
-                "threshold": "門檻", "coverage": "自動處理",
-                "accuracyOnCovered": "該批準確率", "n": "張數"}),
-                width="stretch", hide_index=True)
+            st.dataframe(
+                pd.DataFrame(m["coverageCurve"]).rename(
+                    columns={
+                        "threshold": "門檻",
+                        "coverage": "自動處理",
+                        "accuracyOnCovered": "該批準確率",
+                        "n": "張數",
+                    }
+                ),
+                width="stretch",
+                hide_index=True,
+            )
         if m.get("perClass"):
             st.caption("每類指標")
-            st.dataframe(pd.DataFrame(m["perClass"]).T.sort_values("support", ascending=False),
-                         width="stretch", height=420)
+            st.dataframe(
+                pd.DataFrame(m["perClass"]).T.sort_values("support", ascending=False),
+                width="stretch",
+                height=420,
+            )
     if (pick / "confusion.png").exists():
         st.image(str(pick / "confusion.png"))
     errs = sorted((pick / "errors").glob("*.jpg")) if (pick / "errors").exists() else []

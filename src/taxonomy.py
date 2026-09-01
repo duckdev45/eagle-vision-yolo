@@ -6,6 +6,7 @@
     uv run src/taxonomy.py            # 更新快取
     uv run src/taxonomy.py 矽利康      # 查某個詞掛在哪一支
 """
+
 from __future__ import annotations
 
 import json
@@ -13,8 +14,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-import paths  # noqa: E402
-from api import Pms  # noqa: E402
+import paths
+from api import Pms
 
 CACHE = paths.ROOT / "reference" / "billing_items.json"
 
@@ -56,5 +57,7 @@ if __name__ == "__main__":
     else:
         fetch()
         rows = flatten()
-        print(f"{len({r[0] for r in rows})} 大類 / {len({r[:2] for r in rows})} 中類 / "
-              f"{len([r for r in rows if r[2]])} 小類 → {CACHE}")
+        print(
+            f"{len({r[0] for r in rows})} 大類 / {len({r[:2] for r in rows})} 中類 / "
+            f"{len([r for r in rows if r[2]])} 小類 → {CACHE}"
+        )

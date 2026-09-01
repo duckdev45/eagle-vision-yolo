@@ -10,6 +10,7 @@
     uv run src/qms.py --cells            # 只掃母體（不下載），寫 cells.csv
     uv run src/qms.py --sample 3000      # 抽樣 + 下載
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,7 +24,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(__file__))
-import paths  # noqa: E402
+import paths
 
 load_dotenv()
 
@@ -61,18 +62,18 @@ class Qms:
         return self._call("GET", "/v1/building/construction/inspection/info")
 
     def cells(self, construction_id: str, code: str) -> list[dict]:
-        d = self._call("POST", "/v1/building/construction/summary/detail",
-                       json={"module": MODULE, "constructionId": construction_id,
-                             "inspectionInfoCode": code})
+        d = self._call(
+            "POST",
+            "/v1/building/construction/summary/detail",
+            json={"module": MODULE, "constructionId": construction_id, "inspectionInfoCode": code},
+        )
         return d.get("detail") or []
 
     def cell_photos(self, cell_id: str) -> dict:
-        return self._call("GET", f"/v1/building/construction/inspection/{cell_id}",
-                          params={"module": MODULE})
+        return self._call("GET", f"/v1/building/construction/inspection/{cell_id}", params={"module": MODULE})
 
     def urls(self, file_ids: list[str]) -> dict[str, str]:
-        d = self._call("POST", "/v1/file/info", params={"pathCategory": PATH_CATEGORY},
-                       json={"id": file_ids})
+        d = self._call("POST", "/v1/file/info", params={"pathCategory": PATH_CATEGORY}, json={"id": file_ids})
         d = d if isinstance(d, list) else [d]
         return {f["id"]: f["url"] for f in d if f.get("url")}
 
@@ -82,7 +83,10 @@ class Qms:
 
 def leaves(tree) -> list[tuple[str, str, str, str]]:
     """→ [(大類, 中類, 小類名, 小類code)]。只有葉節點的 code 查得到格子。"""
-    nm = lambda n: (n["name"]["zh-TW"] if isinstance(n["name"], dict) else n["name"]).strip()
+
+    def nm(n):
+        return (n["name"]["zh-TW"] if isinstance(n["name"], dict) else n["name"]).strip()
+
     out = []
     for a in tree:
         for b in a.get("children") or []:
@@ -111,13 +115,21 @@ def scan_cells(log=print) -> pd.DataFrame:
                 log(f"  {c['name']}/{code} 失敗：{e}")
                 continue
             for cell in cells:
-                rows.append({
-                    "constructionId": c["id"], "constrName": c["name"],
-                    "l1": l1, "l2": l2, "l3": l3, "code": code,
-                    "constructionInsId": cell["constructionInsId"],
-                    "floor": cell.get("floor"), "room": cell.get("room"),
-                    "status": cell.get("status"), "count": cell.get("count") or 0,
-                })
+                rows.append(
+                    {
+                        "constructionId": c["id"],
+                        "constrName": c["name"],
+                        "l1": l1,
+                        "l2": l2,
+                        "l3": l3,
+                        "code": code,
+                        "constructionInsId": cell["constructionInsId"],
+                        "floor": cell.get("floor"),
+                        "room": cell.get("room"),
+                        "status": cell.get("status"),
+                        "count": cell.get("count") or 0,
+                    }
+                )
             if i % 60 == 0:
                 log(f"  {c['name']} {i}/{len(lv)}  已收 {len(rows)} 格")
     q.close()
@@ -141,8 +153,8 @@ def sample(n: int = 3000, per_class_cap: int = 200, seed: int = 0, log=print) ->
     cells = pd.read_csv(paths.QMS_CELLS)
     cells = cells[cells["count"] > 0]
 
-    rng = random.Random(seed)
-    order = cells.sample(frac=1, random_state=seed)          # 洗牌 = 隨機
+    random.Random(seed)
+    order = cells.sample(frac=1, random_state=seed)  # 洗牌 = 隨機
     picked, per_class, total = [], {}, 0
     for r in order.itertuples():
         if total >= n:
@@ -175,16 +187,28 @@ def sample(n: int = 3000, per_class_cap: int = 200, seed: int = 0, log=print) ->
             for p in photos:
                 if not p.get("id"):
                     continue
-                rows.append({
-                    "fileId": p["id"], "constructionInsId": r.constructionInsId,
-                    "constructionId": r.constructionId, "constrName": r.constrName,
-                    "l1": r.l1, "l2": r.l2, "l3": r.l3, "code": r.code,
-                    "floor": r.floor, "room": r.room, "space": p.get("space"),
-                    "cellStatus": r.status, "photoStatus": p.get("status"),
-                    "displayStatus": p.get("displayStatus"), "signStatus": p.get("signStatus"),
-                    "creator": p.get("creator"), "isVendorUpload": p.get("isVendorUpload"),
-                    "remark": p.get("remark"),
-                })
+                rows.append(
+                    {
+                        "fileId": p["id"],
+                        "constructionInsId": r.constructionInsId,
+                        "constructionId": r.constructionId,
+                        "constrName": r.constrName,
+                        "l1": r.l1,
+                        "l2": r.l2,
+                        "l3": r.l3,
+                        "code": r.code,
+                        "floor": r.floor,
+                        "room": r.room,
+                        "space": p.get("space"),
+                        "cellStatus": r.status,
+                        "photoStatus": p.get("status"),
+                        "displayStatus": p.get("displayStatus"),
+                        "signStatus": p.get("signStatus"),
+                        "creator": p.get("creator"),
+                        "isVendorUpload": p.get("isVendorUpload"),
+                        "remark": p.get("remark"),
+                    }
+                )
             if n % 200 == 0:
                 log(f"  查詢 {n}/{len(picked)} 格")
 
@@ -201,8 +225,8 @@ def sample(n: int = 3000, per_class_cap: int = 200, seed: int = 0, log=print) ->
         except Exception:
             return False
 
-    for i in range(0, len(todo), 100):          # 簽名網址一次換 100 個，1 小時內用完
-        chunk = todo[i:i + 100]
+    for i in range(0, len(todo), 100):  # 簽名網址一次換 100 個，1 小時內用完
+        chunk = todo[i : i + 100]
         try:
             url_map = q.urls(chunk)
         except Exception as e:
@@ -220,8 +244,13 @@ def sample(n: int = 3000, per_class_cap: int = 200, seed: int = 0, log=print) ->
 
     df = pd.DataFrame(rows).drop_duplicates(subset="fileId")
     df.to_csv(paths.QMS_MANIFEST, index=False)
-    stat = {"cells": len(picked), "photos": len(df), "downloaded": ok, "failed": fail,
-            "classes": int(df.code.nunique()) if len(df) else 0}
+    stat = {
+        "cells": len(picked),
+        "photos": len(df),
+        "downloaded": ok,
+        "failed": fail,
+        "classes": int(df.code.nunique()) if len(df) else 0,
+    }
     log(f"完成：{stat} → {paths.QMS_MANIFEST}")
     return stat
 
@@ -242,7 +271,7 @@ def labeled(min_class_size: int | None = None, completed_only: bool = False) -> 
     cfg = yaml.safe_load(LABEL_CFG.read_text()) if LABEL_CFG.exists() else {}
     cfg = cfg or {}
     df = pd.read_csv(paths.QMS_MANIFEST)
-    if completed_only:                       # 退件重拍的照片本身可能就是拍壞的
+    if completed_only:  # 退件重拍的照片本身可能就是拍壞的
         df = df[df.cellStatus == "COMPLETE"]
     df = df[~df.l2.isin(cfg.get("exclude") or [])]
     df = df.assign(cls=df.l2.replace(cfg.get("merge") or {}))

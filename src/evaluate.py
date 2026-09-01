@@ -5,6 +5,7 @@
 
     uv run --extra train src/evaluate.py [--split v1] [--baseline]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -19,13 +20,14 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(__file__))
-import paths  # noqa: E402
-import split as split_mod  # noqa: E402
-from labels import Labeler, labeled_manifest  # noqa: E402
+import paths
+import split as split_mod
+from labels import Labeler, labeled_manifest
 
 
 def confusion_png(y_true, y_pred, labels, out) -> None:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib import font_manager
@@ -53,8 +55,13 @@ def confusion_png(y_true, y_pred, labels, out) -> None:
     plt.close(fig)
 
 
-def gemini_baseline(df_test: pd.DataFrame, labeler: Labeler, valid: set[str],
-                    local_pred: dict[str, str] | None = None, detail_csv=None) -> dict:
+def gemini_baseline(
+    df_test: pd.DataFrame,
+    labeler: Labeler,
+    valid: set[str],
+    local_pred: dict[str, str] | None = None,
+    detail_csv=None,
+) -> dict:
     """predWorkItem（= photos[].anno.workItem）經同一套規則正規化後的準確率。
 
     valid = 本地模型實際存在的類別。Gemini 正規化後可能命中一個因
@@ -68,13 +75,17 @@ def gemini_baseline(df_test: pd.DataFrame, labeler: Labeler, valid: set[str],
     pred = raw.map(lambda c: c if c in valid else labeler.fallback)
     local = sub.fileId.map(local_pred or {})
     if detail_csv is not None:
-        sub.assign(geminiRaw=sub.predWorkItem, geminiNorm=pred, localPred=local,
-                   geminiHit=pred.values == sub.cls.values,
-                   localHit=local.values == sub.cls.values)[
-            ["fileId", "title", "cls", "geminiRaw", "geminiNorm", "geminiHit",
-             "localPred", "localHit"]].to_csv(detail_csv, index=False)
+        sub.assign(
+            geminiRaw=sub.predWorkItem,
+            geminiNorm=pred,
+            localPred=local,
+            geminiHit=pred.values == sub.cls.values,
+            localHit=local.values == sub.cls.values,
+        )[["fileId", "title", "cls", "geminiRaw", "geminiNorm", "geminiHit", "localPred", "localHit"]].to_csv(
+            detail_csv, index=False
+        )
     out = {
-        "support": int(len(sub)),
+        "support": len(sub),
         "coverage": round(len(sub) / max(len(df_test), 1), 3),
         "top1": round(float((pred.values == sub.cls.values).mean()), 3),
         "distinctRawStrings": int(sub.predWorkItem.nunique()),
@@ -100,14 +111,25 @@ def coverage_curve(proba, y_true, classes) -> list[dict]:
         m = conf >= th
         if not m.sum():
             continue
-        out.append({"threshold": th, "coverage": round(float(m.mean()), 3),
-                    "accuracyOnCovered": round(float((pred[m] == y_true[m]).mean()), 3),
-                    "n": int(m.sum())})
+        out.append(
+            {
+                "threshold": th,
+                "coverage": round(float(m.mean()), 3),
+                "accuracyOnCovered": round(float((pred[m] == y_true[m]).mean()), 3),
+                "n": int(m.sum()),
+            }
+        )
     return out
 
 
-def run(split_name: str = "v1", model_key: str = "siglip", baseline: bool = True,
-        run_tag: str = "probe", errors: int = 24, log=print) -> str:
+def run(
+    split_name: str = "v1",
+    model_key: str = "siglip",
+    baseline: bool = True,
+    run_tag: str = "probe",
+    errors: int = 24,
+    log=print,
+) -> str:
     from sklearn.metrics import classification_report
 
     import features
@@ -156,8 +178,12 @@ def run(split_name: str = "v1", model_key: str = "siglip", baseline: bool = True
         rows = [f for f in test_ids if f in man.index]
         if rows:
             metrics["geminiBaseline"] = gemini_baseline(
-                man.loc[rows].reset_index(), Labeler.load(), set(cls.values()),
-                dict(zip(test_ids, pred)), outdir / "gemini_detail.csv")
+                man.loc[rows].reset_index(),
+                Labeler.load(),
+                set(cls.values()),
+                dict(zip(test_ids, pred)),
+                outdir / "gemini_detail.csv",
+            )
 
     (outdir / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=1))
     confusion_png(y, pred, labels, outdir / "confusion.png")
@@ -181,12 +207,21 @@ def run(split_name: str = "v1", model_key: str = "siglip", baseline: bool = True
         f"| 每千張成本 | 0 | 依 token 計價 |\n"
         f"| 新工種上線 | 需重訓 | 改一行 prompt |\n"
         f"| 離線可用 | 可 | 不可 |\n\n"
-        f"註：{g.get('note', '')}；Gemini 原始字串 {g.get('distinctRawStrings', 0)} 種。\n")
+        f"註：{g.get('note', '')}；Gemini 原始字串 {g.get('distinctRawStrings', 0)} 種。\n"
+    )
 
-    (outdir / "config.json").write_text(json.dumps({
-        "labelsVersion": Labeler.load().version, "split": split_name,
-        "encoder": model_key, "model": f"probe-{model_key}-{split_name}.pkl",
-    }, ensure_ascii=False, indent=1))
+    (outdir / "config.json").write_text(
+        json.dumps(
+            {
+                "labelsVersion": Labeler.load().version,
+                "split": split_name,
+                "encoder": model_key,
+                "model": f"probe-{model_key}-{split_name}.pkl",
+            },
+            ensure_ascii=False,
+            indent=1,
+        )
+    )
 
     log(f"報告 → {outdir}  top1={metrics['top1']} macroF1={metrics['macroF1']}")
     return str(outdir)

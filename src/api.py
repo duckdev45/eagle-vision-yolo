@@ -9,10 +9,12 @@
 dev 另外留著 7/23 起的 81 張（含 Project A、發大財 這種測試資料）。
 manifest 因此多一欄 `apiHost` 記來源——見 sync.merge_manifest。
 """
+
 from __future__ import annotations
 
 import os
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 import httpx
 from dotenv import load_dotenv
@@ -38,15 +40,17 @@ class Pms:
         self.password = password or os.getenv("PMS_PASSWORD") or ""
         self.c = httpx.Client(base_url=BASE, timeout=TIMEOUT, follow_redirects=True)
         self.token: str | None = None
-        self.last_total: int | None = None   # 上一次 list_reports 的 dataCnt，給呼叫端對帳
+        self.last_total: int | None = None  # 上一次 list_reports 的 dataCnt，給呼叫端對帳
 
     # --- 內部 ---------------------------------------------------------
     def _unwrap(self, r: httpx.Response) -> Any:
         if r.status_code == 401 and self.token:
             self.login()
-            r = self.c.send(self.c.build_request(r.request.method, r.request.url,
-                                                 content=r.request.content,
-                                                 headers=self._headers()))
+            r = self.c.send(
+                self.c.build_request(
+                    r.request.method, r.request.url, content=r.request.content, headers=self._headers()
+                )
+            )
         if r.status_code >= 400:
             raise ApiError(f"{r.request.method} {r.request.url} -> {r.status_code} {r.text[:300]}")
         body = r.json()
@@ -70,14 +74,25 @@ class Pms:
         if not self.emp_id or not self.password:
             raise ApiError("缺 PMS_EMP_ID / PMS_PASSWORD，請填 .env")
         self.token = None
-        data = self._post("/v1/auth/login/password", {
-            "empId": self.emp_id, "password": self.password, "clientType": "WEB",
-        })
+        data = self._post(
+            "/v1/auth/login/password",
+            {
+                "empId": self.emp_id,
+                "password": self.password,
+                "clientType": "WEB",
+            },
+        )
         self.token = data["accessToken"]
 
-    def list_reports(self, *, category: str = "SITE", constr_id: str | None = None,
-                     start_date: str | None = None, end_date: str | None = None,
-                     page_size: int = 100) -> Iterator[dict]:
+    def list_reports(
+        self,
+        *,
+        category: str = "SITE",
+        constr_id: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        page_size: int = 100,
+    ) -> Iterator[dict]:
         """分頁走完 /v1/daily-report/reports/query。
 
         實測回應：pageStart=目前頁、pageSize=**總頁數**、dataCnt=總筆數。
@@ -86,7 +101,9 @@ class Pms:
         page = 1
         while True:
             body: dict[str, Any] = {
-                "pageStart": page, "pageLimits": page_size, "category": category,
+                "pageStart": page,
+                "pageLimits": page_size,
+                "category": category,
                 "sortOrder": [{"item": "reportDate", "order": "ASC"}],
             }
             if constr_id:
@@ -107,8 +124,7 @@ class Pms:
 
     def file_urls(self, file_ids: list[str], path_category: str) -> dict[str, str]:
         """重新取簽名網址（照片 url 只有 1 小時；補抓時用）。"""
-        data = self._post("/v1/file/info/query", {"id": file_ids},
-                          params={"pathCategory": path_category})
+        data = self._post("/v1/file/info/query", {"id": file_ids}, params={"pathCategory": path_category})
         return {f["id"]: f["url"] for f in data if f.get("url")}
 
     def download(self, url: str) -> bytes:

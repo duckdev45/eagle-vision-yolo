@@ -4,6 +4,7 @@
 （服務層）；本檔保留 manifest 組裝（labeled_manifest / pending_classes /
 unclaimed），它們讀 data/ 的檔案，屬資料編排層。
 """
+
 from __future__ import annotations
 
 import os
@@ -12,10 +13,10 @@ import sys
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # root
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))                   # src/
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # src/
 
-import paths  # noqa: E402
-from core.labeler import (  # noqa: E402,F401  (全名轉口：下游 8 個模組依賴這些名字)
+import paths
+from core.labeler import (
     SPEC_KEY_TRADE,
     Labeler,
     human_refs,
@@ -26,7 +27,7 @@ from core.labeler import (  # noqa: E402,F401  (全名轉口：下游 8 個模�
 )
 
 
-def pending_classes(df: pd.DataFrame = None, lab: "Labeler" = None) -> pd.DataFrame:
+def pending_classes(df: pd.DataFrame = None, lab: Labeler = None) -> pd.DataFrame:
     """規則認得、但張數還沒到 `min_class_size` 的類別 → 每列一類。
 
     這些不是錯誤，是**在排隊**：張數一過門檻就自動進訓練，不用改任何程式
@@ -40,6 +41,7 @@ def pending_classes(df: pd.DataFrame = None, lab: "Labeler" = None) -> pd.DataFr
     lab = lab or Labeler.load()
     if df is None:
         from sync import _truthy
+
         df = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
         if "active" in df:
             df = df[_truthy(df.active)]
@@ -49,17 +51,26 @@ def pending_classes(df: pd.DataFrame = None, lab: "Labeler" = None) -> pd.DataFr
     small = n[n < lab.min_class_size]
     if not len(small):
         return pd.DataFrame(columns=["cls", "photos", "need", "latest"])
-    latest = (full[full.cls.isin(small.index)].groupby("cls").reportDate.max()
-              if "reportDate" in full else pd.Series(dtype=str))
-    return pd.DataFrame({
-        "cls": small.index,
-        "photos": small.values,
-        "need": lab.min_class_size - small.values,
-        "latest": [latest.get(c, "") for c in small.index],
-    }).sort_values("need").reset_index(drop=True)
+    latest = (
+        full[full.cls.isin(small.index)].groupby("cls").reportDate.max()
+        if "reportDate" in full
+        else pd.Series(dtype=str)
+    )
+    return (
+        pd.DataFrame(
+            {
+                "cls": small.index,
+                "photos": small.values,
+                "need": lab.min_class_size - small.values,
+                "latest": [latest.get(c, "") for c in small.index],
+            }
+        )
+        .sort_values("need")
+        .reset_index(drop=True)
+    )
 
 
-def unclaimed(df: pd.DataFrame = None, lab: "Labeler" = None) -> pd.DataFrame:
+def unclaimed(df: pd.DataFrame = None, lab: Labeler = None) -> pd.DataFrame:
     """規則沒認領、因此不會進訓練的照片（`cls == fallback`）。
 
     `apply()` 預設就把它們濾掉了，所以誰也看不到——操作台 ⑥ 那個
@@ -71,6 +82,7 @@ def unclaimed(df: pd.DataFrame = None, lab: "Labeler" = None) -> pd.DataFrame:
     lab = lab or Labeler.load()
     if df is None:
         from sync import _truthy
+
         df = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
         if "active" in df:
             df = df[_truthy(df.active)]
@@ -91,14 +103,16 @@ def legacy_manifest() -> pd.DataFrame:
     if paths.MANIFEST.exists():
         p = pd.read_csv(paths.MANIFEST, dtype=str, usecols=["constrName", "constrId"])
         name2id = dict(p.dropna().drop_duplicates().values)
-    return pd.DataFrame({
-        "fileId": d.fileId,
-        "dataset": "legacy",
-        "title": d.title,
-        "reportDate": d.reportDate.fillna(""),
-        "constrName": d.constrName,
-        "constrId": d.constrName.map(lambda n: name2id.get(n, f"legacy:{n}")),
-    })
+    return pd.DataFrame(
+        {
+            "fileId": d.fileId,
+            "dataset": "legacy",
+            "title": d.title,
+            "reportDate": d.reportDate.fillna(""),
+            "constrName": d.constrName,
+            "constrId": d.constrName.map(lambda n: name2id.get(n, f"legacy:{n}")),
+        }
+    )
 
 
 def labeled_manifest(active_only: bool = True, with_legacy: bool = False) -> pd.DataFrame:

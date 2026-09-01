@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """從 QMS 爬取 ISO 標準 checklist，轉成 TSV。"""
+
 from __future__ import annotations
 
-import httpx
-import json
+import os
 import sys
-from pathlib import Path
-from datetime import datetime
 from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+
+import httpx
 
 BASE = os.getenv("QMS_API_BASE_URL", "").rstrip("/")  # 由 .env 提供；見 .env.example
 TIMEOUT = 30
@@ -26,7 +28,7 @@ class QmsIsoCrawler:
         r = self.c.post("/v1/auth/login/admin", json={"empId": self.emp_id, "password": self.password})
         r.raise_for_status()
         self.token = r.json()["data"]["token"]
-        print(f"✓ 登入成功")
+        print("✓ 登入成功")
 
     def _call(self, method: str, path: str, **kw):
         headers = {"Authorization": f"Bearer {self.token}"}
@@ -89,10 +91,10 @@ def write_tsv(doc_list: list[dict], output_file: Path) -> None:
 
     with open(output_file, "w", encoding="utf-8") as f:
         # 寫檔頭
-        f.write(f"# QS 檢查項原始資料\n")
-        f.write(f"# 格式: itemNo <TAB> status(O=OPTIONAL階段節點 / R=REQUIRED檢查項) <TAB> name\n")
+        f.write("# QS 檢查項原始資料\n")
+        f.write("# 格式: itemNo <TAB> status(O=OPTIONAL階段節點 / R=REQUIRED檢查項) <TAB> name\n")
         f.write(f"# 快照 {date_str}，取自 QMS API。name 欄位逐字照抄（含原文錯字與空格）。\n")
-        f.write(f"\n")
+        f.write("\n")
 
         for doc in doc_list:
             doc_no = doc.get("docNo", "")

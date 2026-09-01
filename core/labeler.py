@@ -5,19 +5,22 @@
 manifest 組裝（labeled_manifest / legacy_manifest / pending_classes / unclaimed）
 留在 src/labels.py——它們吃的是 data/ 的檔案，屬資料編排層。
 """
+
 from __future__ import annotations
 
-import sys as _sys
 import os as _os
+import sys as _sys
 
-for _p in (_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-           _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src")):
+for _p in (
+    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+    _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src"),
+):
     if _p not in _sys.path:
         _sys.path.insert(0, _p)
 
 import json  # noqa: E402
 import re  # noqa: E402
-from datetime import date  # noqa: E402
+from datetime import UTC, date  # noqa: E402
 
 import pandas as pd  # noqa: E402
 import yaml  # noqa: E402
@@ -34,7 +37,7 @@ class Labeler:
         self.fallback = cfg.get("fallback", "其他")
         self.drop_fallback = bool(cfg.get("drop_fallback", False))
         self.min_class_size = int(cfg.get("min_class_size", 0))
-        self.small_class = cfg.get("small_class", "merge")   # drop | merge
+        self.small_class = cfg.get("small_class", "merge")  # drop | merge
         self.version = cfg.get("version")
         excl = cfg.get("exclude") or {}
         self.excl_dates = {str(d) for d in (excl.get("dates") or [])}
@@ -43,7 +46,7 @@ class Labeler:
         self.drop_future = bool(excl.get("future_dates", True))
 
     @classmethod
-    def load(cls, path=None) -> "Labeler":
+    def load(cls, path=None) -> Labeler:
         return cls(yaml.safe_load((path or paths.LABELS_YAML).read_text()))
 
     def label(self, title) -> str | None:
@@ -77,8 +80,13 @@ class Labeler:
             out = out[~out.status.astype(str).isin(self.excl_status)]
         return out
 
-    def apply(self, df: pd.DataFrame, drop_small: bool = True,
-              today: str | None = None, overrides: dict | None = None) -> pd.DataFrame:
+    def apply(
+        self,
+        df: pd.DataFrame,
+        drop_small: bool = True,
+        today: str | None = None,
+        overrides: dict | None = None,
+    ) -> pd.DataFrame:
         """加上 cls 欄；排除壞日報與 junk 標題；小類別併入 fallback 或整批丟掉。
 
         overrides = 人工複核的照片層級標籤，蓋掉 title 推出來的那個。
@@ -92,7 +100,7 @@ class Labeler:
         # 人工複核蓋在規則之上。要在 notna 過濾**之前**——被 junk 規則排掉的照片，
         # 人看過說它其實是某一類，那就該收回來訓練。
         ov = load_reviews() if overrides is None else overrides
-        if ov and "fileId" in out:      # 測試用的小 DataFrame 沒有 fileId 欄
+        if ov and "fileId" in out:  # 測試用的小 DataFrame 沒有 fileId 欄
             hit = out.fileId.map(ov)
             out.loc[hit.notna(), "cls"] = hit[hit.notna()]
         out = out[out.cls.notna()]
@@ -124,7 +132,7 @@ def load_reviews() -> dict[str, str]:
     return dict(zip(r.fileId, r.cls.str.strip()))
 
 
-def orphan_reviews(lab: "Labeler | None" = None) -> dict[str, str]:
+def orphan_reviews(lab: Labeler | None = None) -> dict[str, str]:
     """複核裁決指到「規則已經產不出來」的類別 → {fileId: 那個類別}。
 
     類別改名（實測：`設備-電梯停車` 拆成 `設備-電梯` / `設備-機械停車`）會讓舊裁決
@@ -148,7 +156,7 @@ def load_boxes() -> dict[str, list[list[int]]]:
     if "box" not in r.columns:
         return {}
     out = {}
-    for f, b in zip(r.fileId, r.box):          # append-only，後面的蓋前面的
+    for f, b in zip(r.fileId, r.box):  # append-only，後面的蓋前面的
         if not isinstance(b, str) or not b.strip():
             out.pop(f, None)
             continue
@@ -161,20 +169,31 @@ def load_boxes() -> dict[str, list[list[int]]]:
     return {f: v for f, v in out.items() if v}
 
 
-def save_review(file_id: str, cls: str, note: str = "", when: str | None = None,
-                boxes: list | None = None) -> None:
+def save_review(
+    file_id: str, cls: str, note: str = "", when: str | None = None, boxes: list | None = None
+) -> None:
     """append 一列。刻意不覆寫舊列：判斷改過就是要留痕，出事才追得回來。"""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    ts = when or datetime.now(timezone.utc).isoformat(timespec="seconds")
-    new = pd.DataFrame([{"fileId": file_id, "cls": cls, "note": note, "reviewedAt": ts,
-                         "box": json.dumps(boxes, ensure_ascii=False) if boxes else ""}])
+    ts = when or datetime.now(UTC).isoformat(timespec="seconds")
+    new = pd.DataFrame(
+        [
+            {
+                "fileId": file_id,
+                "cls": cls,
+                "note": note,
+                "reviewedAt": ts,
+                "box": json.dumps(boxes, ensure_ascii=False) if boxes else "",
+            }
+        ]
+    )
     # 舊檔沒有 box 欄。直接 append 會讓欄位錯位，所以欄位對不上時整份重寫一次。
     if paths.REVIEW.exists():
         old = pd.read_csv(paths.REVIEW, dtype=str)
         if list(old.columns) != list(new.columns):
-            pd.concat([old.reindex(columns=new.columns), new],
-                      ignore_index=True).to_csv(paths.REVIEW, index=False)
+            pd.concat([old.reindex(columns=new.columns), new], ignore_index=True).to_csv(
+                paths.REVIEW, index=False
+            )
             return
     new.to_csv(paths.REVIEW, mode="a", header=not paths.REVIEW.exists(), index=False)
 
@@ -182,11 +201,18 @@ def save_review(file_id: str, cls: str, note: str = "", when: str | None = None,
 # feMeta.specKey 是人在前端**點選**的工種，不是自由文字。實測與 title 推出的類別
 # 一致率 136/138（98.6%），是目前最乾淨的人工訊號——但它只到「工種」這一層，
 # 分不出 泥作-地磚 / 泥作-壁磚，所以只拿來驗前綴，不直接當標籤。
-SPEC_KEY_TRADE = {"油漆": "油漆", "磁磚": "泥作", "防水": "防水",
-                  "鋼筋": "結構", "連續壁": "基礎", "模板": "結構", "木作": "木作"}
+SPEC_KEY_TRADE = {
+    "油漆": "油漆",
+    "磁磚": "泥作",
+    "防水": "防水",
+    "鋼筋": "結構",
+    "連續壁": "基礎",
+    "模板": "結構",
+    "木作": "木作",
+}
 
 
-def human_refs(df: pd.DataFrame, lab: "Labeler") -> pd.DataFrame:
+def human_refs(df: pd.DataFrame, lab: Labeler) -> pd.DataFrame:
     """把日報裡**人寫的**兩個欄位也算成參考答案，回傳 (clsChips, specTrade) 兩欄。
 
     - `chipsOn`：feMeta.pool 裡 `custom: true` 的查驗重點，工地主任自己打的字
@@ -201,10 +227,18 @@ def human_refs(df: pd.DataFrame, lab: "Labeler") -> pd.DataFrame:
     """
     chips = df.get("chipsOn")
     spec = df.get("specKey")
-    return pd.DataFrame({
-        "clsChips": (chips.map(lambda t: lab.label(t.replace("|", ""))
-                               if isinstance(t, str) else None)
-                     if chips is not None else None),
-        "specTrade": (spec.map(lambda k: SPEC_KEY_TRADE.get(k) if isinstance(k, str) else None)
-                      if spec is not None else None),
-    }, index=df.index)
+    return pd.DataFrame(
+        {
+            "clsChips": (
+                chips.map(lambda t: lab.label(t.replace("|", "")) if isinstance(t, str) else None)
+                if chips is not None
+                else None
+            ),
+            "specTrade": (
+                spec.map(lambda k: SPEC_KEY_TRADE.get(k) if isinstance(k, str) else None)
+                if spec is not None
+                else None
+            ),
+        },
+        index=df.index,
+    )
