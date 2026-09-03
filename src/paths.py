@@ -37,6 +37,14 @@ QMS_CELLS = QMS / "raw" / "cells.csv"  # 母體清單（抽樣前的全部格子
 QMS_IMAGES = QMS / "derived" / "images"
 QMS_TREE = QMS / "derived" / "tree"
 
+# --- Field Reports 缺失照片語料（樂氧森 2026-08-28 快照，2026-09-01 進站）------
+# 第四資料源，與日報/QMS/LEGACY sha1 零重疊。單日單場 → 只當煙霧測試＋標註練兵，
+# 不可做 train/test 切分（詳 data/field_reports/README.md）。
+FIELD_REPORTS = ROOT / "data" / "field_reports"
+FR_PHOTOS = FIELD_REPORTS / "raw" / "photos"          # {photoId}.webp（1600px 衍生層，非 raw）
+FR_MANIFEST = FIELD_REPORTS / "raw" / "manifest.csv"  # site=樂氧森（原值留在 siteRaw）
+FR_GDINO = FIELD_REPORTS / "derived" / "gdino"        # GDINO pre-annotations（AI_GUESS）
+
 REPORTS_OUT = ROOT / "reports"
 MODELS = ROOT / "models"
 LABELS_YAML = ROOT / "labels.yaml"
@@ -57,5 +65,6 @@ def ensure_dirs() -> None:
         QMS_TREE,
         LEGACY_PHOTOS,
         LEGACY_IMAGES,
+        FR_GDINO,
     ):
         p.mkdir(parents=True, exist_ok=True)

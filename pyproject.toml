@@ -33,11 +33,16 @@ train = [
     "onnxscript>=0.7.1",
     "onnx>=1.22.0",
     "onnxruntime>=1.28.0",
+    "ultralytics>=8.4.138",
 ]
 # 開發：lint + format（Ruff 一件取代 flake8+isort+black）
 dev = [
     "ruff>=0.6",
     "pytest>=8",
+]
+gdino = [
+    "torch>=2.4",
+    "transformers>=4.48",
 ]
 
 [tool.uv]

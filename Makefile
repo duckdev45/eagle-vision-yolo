@@ -14,10 +14,10 @@ SPLIT_FLAGS := $(if $(LEGACY),--with-legacy,) \
                $(if $(MIN_TRAIN),--min-train $(MIN_TRAIN),) \
                $(if $(LEGACY_FILL),--legacy-fill $(LEGACY_FILL),)
 
-.PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases
+.PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases fr-demo fr-gdino
 
 help:
-	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/'
+	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/	/'
 
 retrain: data model  ## 新照片進來之後的完整重跑
 
@@ -92,3 +92,9 @@ fmt: ## Ruff 一鍵修正（lint --fix + format；改動自行 review）
 
 app: ## 操作台
 	$(TRAIN) streamlit run src/app.py
+
+fr-gdino: ## 樂氧森缺失照片 × GDINO 煙霧測試（--all 全量；預設抽 30）
+	uv run --extra gdino src/fr_gdino.py --all
+
+fr-demo: ## GDINO 標註 demo 操作台（照片牆＋人審打分）
+	uv run streamlit run src/fr_app.py

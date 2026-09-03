@@ -31,10 +31,10 @@ build/
 # ML Model outputs and large data
 data/
 models/
-*/.pkl
-*/.pt
-*/.pth
-*/.h5
+*.pkl
+*.pt
+*.pth
+*.h5
 
 # 公司資料不上 git（QS 標準、合約工作約定、請款項、labels 對應）。
 # 2026-09-01 起以 git-filter-repo 從全部歷史移除；此規則防止再次誤加。
