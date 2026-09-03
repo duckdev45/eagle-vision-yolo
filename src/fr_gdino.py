@@ -39,13 +39,21 @@ from paths import FR_MANIFEST, FR_PHOTOS, ROOT
 # （thr 0.40 → precision 反降為 3%）：分數沒有鑑別力，問題在模型不在門檻。
 # 存活：unfinished edge 3/4、rusty metal 3/10（具體物件詞 > 抽象狀態詞）、
 # crack in the floor 1/2。v3 只留存活組＋物件型詞。
+# 2026-09-03 base 模型（同 v3 詞彙表）對照跑全量：crack 2→32 張大幅回血，但
+# damage/scratch/paint 依然死透、rust 84 框（僅 5 張真標鏽蝕）假陽性照樣氾濫——
+# 換大模型救不了死詞、也救不了 rust 的假陽性，問題在詞彙選字不在模型量級。
+# 用 manifest description 撈已知真陽性照片（scratch 9 張/paint 11 張/damage 8 張）
+# 小樣本測新詞：damage/scratch/paint 全部改「具體物件詞」（door frame／floor tile／
+# wall）掛動詞子句後，6/6 真陽性全命中（原詞 0 命中）——但物件詞本身可能跟 rust
+# 同個毛病（見得到物件、判不出狀態），v4 只是讓詞「活過來」，precision 仍待全量
+# 人審驗證，不能只看真陽性測試。
 PATTERN_PHRASES: dict[str, list[str]] = {
     "crack": ["crack", "crack in the wall", "crack in the floor"],
     "gap_finish": ["gap between tiles", "gap", "hole in the wall", "unfinished edge"],
-    "damage": ["broken tile", "broken part"],
-    "scratch": ["scratch", "scratch mark", "scraped surface"],
+    "damage": ["cracked floor tile", "damaged floor tile", "hole in the floor"],
+    "scratch": ["scratched door frame", "scratched wood surface", "scuff mark"],
     "rust": ["rust", "rusty metal", "rusty faucet", "corrosion"],
-    "paint": ["peeling paint", "paint peeling off", "blistered paint"],
+    "paint": ["peeling paint on wall", "paint peeling off wall", "faded paint patch"],
     "dirt_residue": ["stain", "dust", "smudge", "debris", "garbage"],
 }
 
@@ -53,6 +61,29 @@ PATTERN_PHRASES: dict[str, list[str]] = {
 PHRASE2PATTERN: dict[str, str] = {
     p.lower(): pat for pat, phrases in PATTERN_PHRASES.items() for p in phrases
 }
+
+
+def resolve_pattern(phrase: str) -> str | None:
+    """phrase → pattern，含精確比對失敗時的救援。
+
+    2026-09-03 發現：GDINO post-process 常把 prompt 短語截斷/疊字回傳（如
+    "scratched wood surface" 只回 "wood surface"，或同 pattern 內兩個相似短語
+    共用尾詞時回傳疊字垃圾如 "floor tile floor tile"），只用字典精確比對會把
+    真命中當「認不得」全丟——先前 v1~v3 好幾個「死詞」疑似被這個過濾誤殺，不是
+    真的詞彙選字問題。救援策略改用**詞集合**比對（忽略順序與重複詞）：回傳片段
+    的詞集合是某個完整短語詞集合的子集（或反之），視為命中；只有唯一候選 pattern
+    才採信（prompt 把全部 pattern 的短語接成一條，跨 pattern 誤配的風險真實存在）。
+    """
+    exact = PHRASE2PATTERN.get(phrase)
+    if exact:
+        return exact
+    words = set(phrase.split())
+    candidates = {
+        pat for pat, phrases in PATTERN_PHRASES.items()
+        for p in phrases
+        if (pw := set(p.lower().split())) and (words <= pw or pw <= words)
+    }
+    return candidates.pop() if len(candidates) == 1 else None
 
 MODEL_ID = "IDEA-Research/grounding-dino-tiny"
 TINY_LIST = ROOT / "data" / "field_reports" / "derived" / "tiny_images.json"
@@ -146,9 +177,9 @@ class GdinoRunner:
         boxes: list[dict[str, Any]] = []
         for box, label, score in zip(results["boxes"], results["labels"], results["scores"], strict=False):
             phrase = str(label).strip().lower()
-            pattern = PHRASE2PATTERN.get(phrase)
+            pattern = resolve_pattern(phrase)
             if pattern is None:
-                if not keep_unknown:  # post-process 有時會合併/改寫短語，詞彙表模式下防禦性略過
+                if not keep_unknown:  # 唯一候選都找不到——真的認不得，詞彙表模式下略過
                     continue
                 pattern = "custom"
             x1, y1, x2, y2 = [round(float(v)) for v in box.tolist()]
@@ -188,8 +219,8 @@ def run(args: argparse.Namespace) -> Path:
     ann_dir = run_dir / "annotations"
     ann_dir.mkdir(parents=True, exist_ok=True)
 
-    runner = GdinoRunner()
-    print(f"[run {run_id}] photos={len(sample)} device={runner.device} "
+    runner = GdinoRunner(model_id=args.model)
+    print(f"[run {run_id}] model={args.model} photos={len(sample)} device={runner.device} "
           f"box_thr={args.box_threshold} text_thr={args.text_threshold}")
 
     per_pattern: dict[str, dict[str, Any]] = {
@@ -244,7 +275,7 @@ def run(args: argparse.Namespace) -> Path:
     total_ms = round((time.time() - t0) * 1000)
     summary = {
         "runId": run_id,
-        "modelId": MODEL_ID,
+        "modelId": args.model,
         "device": runner.device,
         "photos": len(sample),
         "excludedTiny": len(tiny),
@@ -286,6 +317,7 @@ def main() -> None:
     ap.add_argument("--text-threshold", type=float, default=0.25)
     ap.add_argument("--include-tiny", action="store_true", help="包含長邊<=640 的 15 張")
     ap.add_argument("--device", choices=["cpu", "mps"], default=None)
+    ap.add_argument("--model", default=MODEL_ID, help="HF model id（換大模型驗證是模型還是詞彙表問題）")
     run(ap.parse_args())
 
 
