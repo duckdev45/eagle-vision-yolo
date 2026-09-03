@@ -79,19 +79,29 @@ def test_rule_order_is_the_contract():
     L = Labeler.load()  # 刻意讀真的 labels.yaml，不是 CFG
     # 景觀必須排在清潔前面：「整理」會被清潔規則先吃掉（實測 14 張）
     assert L.label("中庭植栽整理") == "植栽-景觀"
-    # 玻璃排在油漆之後，烤漆玻璃仍歸油漆
-    assert L.label("1F 烤漆玻璃安裝") == "油漆-批土塗裝"
+    # 烤漆玻璃/明鏡排在油漆前面，歸玻璃（v10 翻案：QS0606 查驗表 chipsOn 逐字對上）
+    assert L.label("1F 烤漆玻璃安裝") == "門窗-玻璃"
+    assert L.label("1F-2F各戶室內烤漆及明鏡安裝") == "門窗-玻璃"
     # 矽利康自成一支，不歸門窗
     assert L.label("鋁門窗周邊矽利康") == "防水-矽利康"
     # 打底歸泥作、批土歸油漆（工程分類樹核對過）
-    assert L.label("外牆打底") == "泥作-打底粉光"
+    assert L.label("外牆打底") == "泥作-打底"
     assert L.label("天花批土") == "油漆-批土塗裝"
+    # 粉光排在打底前面：兩者關鍵字不重疊，但粉光是完成面查驗，寫在先讀起來順（v9 拆分）
+    assert L.label("13F內部牆面粉光") == "泥作-粉光"
+    # 判不出階段的殘餘字樣（泥作/抹灰/砌/吊線）預設歸打底，不強猜
+    assert L.label("泰舜初驗泥作缺失改善") == "泥作-打底"
     # 三個泥作類是兄弟，前綴必須一致
     assert L.label("室內地磚貼飾") == "泥作-地磚貼飾"
     assert L.label("9F浴室壁磚貼飾") == "泥作-壁磚貼飾"
+    # 外牆磁磚必須排在壁磚前面，否則被「壁磚」子字串接走，外牆永遠拆不出來（v8 拆分）
+    assert L.label("13F~7F外牆磁磚貼飾") == "泥作-外牆磁磚"
+    assert L.label("外牆貼磁磚") == "泥作-外牆磁磚"
     # 批土排在輕隔間前面：「15F輕隔間批土」照片上就是批土（實測 14 張）
     assert L.label("15F輕隔間批土") == "油漆-批土塗裝"
-    assert L.label("14F輕隔間擊釘") == "輕隔間"  # 沒有批土才算真的輕隔間
+    assert L.label("14F輕隔間擊釘") == "輕隔間-灌漿牆"  # 沒批土、沒輕質磚 → 預設灌漿牆（v7 拆分）
+    # 輕質磚必須排在灌漿牆前面，否則被「輕隔間」吃掉，這類永遠拆不出來
+    assert L.label("15F輕質磚砌築") == "輕隔間-輕質磚"
     # 鋼筋排在清潔前面：「整理」會把鋼筋加工場吃進清潔（實測 10 張）
     assert L.label("鋼筋加工場場地整理") == "結構-鋼筋"
     # 電梯與機械停車是樹上兩個中類，不可併回大類；兩詞都有時停車設備勝
@@ -100,10 +110,33 @@ def test_rule_order_is_the_contract():
     assert L.label("電梯式機械停車設備") == "設備-機械停車"
 
 
+def test_no_rule_is_permanently_shadowed():
+    """規則順序即優先權。較晚規則的某個關鍵字若整個「包含」較早規則的某個關鍵字
+    （較早的是較晚的子字串），較晚那個關鍵字就永遠不可能命中——凡是含較早關鍵字
+    的字串，較早的規則必定先比對到。方向反過來（較晚的關鍵字是較早的子字串，
+    例如「烤漆玻璃」排在「烤漆」前面）是刻意的特例覆蓋，較晚規則的其餘關鍵字
+    照樣可觸發，不算死規則。同一個 label 的兩條規則也不算真衝突（結果一樣）。
+    這是機械可查的死規則，不需要真實資料，跟 test_rule_order_is_the_contract
+    那種要人工判斷「該歸哪類」的案例不同。
+    """
+    L = Labeler.load()
+    kws = [(lab, pat.pattern.split("|")) for pat, lab in L.rules]
+    dead = []
+    for i, (lab_i, kw_i) in enumerate(kws):
+        for lab_j, kw_j in kws[i + 1 :]:
+            if lab_i == lab_j:
+                continue
+            for kj in kw_j:
+                for ki in kw_i:
+                    if ki and kj and ki in kj:
+                        dead.append(f"{lab_i}[{ki}] 擋住 {lab_j}[{kj}]")
+    assert not dead, "發現永遠不會命中的規則，補一條 test_rule_order_is_the_contract 案例或調整關鍵字：\n" + "\n".join(dead)
+
+
 def test_class_names_follow_convention():
     """`工種-施作內容`。新增類別時照著寫，不然又會冒出「磁磚_地」那種名字。"""
     labs = {lab for _, lab in Labeler.load().rules}
-    odd = {c for c in labs if "-" not in c} - {"輕隔間"}  # 輕隔間：樹上只有那一支
+    odd = {c for c in labs if "-" not in c}
     assert not odd, f"沒照命名規約的類別：{sorted(odd)}"
     assert not {c for c in labs if "_" in c}, "底線是程式設計師的複合鍵，不是中文"
 
