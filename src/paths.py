@@ -45,6 +45,8 @@ FR_PHOTOS = FIELD_REPORTS / "raw" / "photos"          # {photoId}.webp（1600px 
 FR_MANIFEST = FIELD_REPORTS / "raw" / "manifest.csv"  # site=樂氧森（原值留在 siteRaw）
 FR_GDINO = FIELD_REPORTS / "derived" / "gdino"        # GDINO pre-annotations（AI_GUESS）
 
+VLM = DERIVED / "vlm"  # gemma4:e4b 判定輸出（尺入鏡 PoC 等，AI_GUESS 層）
+
 REPORTS_OUT = ROOT / "reports"
 MODELS = ROOT / "models"
 LABELS_YAML = ROOT / "labels.yaml"
