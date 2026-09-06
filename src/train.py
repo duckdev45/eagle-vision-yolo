@@ -15,6 +15,7 @@ import pickle
 import sys
 
 import numpy as np
+import pandas as pd
 
 sys.path.insert(0, os.path.dirname(__file__))
 import features
@@ -63,11 +64,63 @@ def probe(split_name: str = "v1", model_key: str = "siglip", C: float = DEFAULT_
     return clf, acc, (xte, yte, ids_te)
 
 
+def _group_map() -> dict[str, str]:
+    """fileId → 案場×日期（PMS）；legacy 照全部同一組（它們永遠只在 train 側）。"""
+    df = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
+    return {r.fileId: f"{r.constrId}|{r.reportDate}" for r in df.itertuples()}
+
+
+def tune_c(
+    split_name: str = "v1",
+    model_key: str = "siglip",
+    cs: list[float] | None = None,
+    folds: int = 5,
+    log=print,
+) -> float:
+    """GroupKFold 重選 C——DEFAULT_C 的註釋就是「資料量一變就要重選」。
+
+    v7 時代（train ~400 張、9 類）選出 C=300 之後，資料長了三倍、類別拆了五次，
+    一直沒重選過。折用 GroupKFold 按 案場×日期——與 split 鐵律同一條，同工地
+    同日不跨 fold，否則選出的 C 會被近重複照灌水。
+    """
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import f1_score
+    from sklearn.model_selection import GroupKFold
+
+    cs = cs or [0.3, 1, 3, 10, 30, 100, 300, 1000, 3000]
+    (xtr, ytr, ids_tr), _ = dataset(split_name, model_key)
+    gmap = _group_map()
+    groups = [gmap.get(f, "legacy") for f in ids_tr]
+    n_splits = min(folds, len(set(groups)))
+    gkf = GroupKFold(n_splits=n_splits)
+    splits = list(gkf.split(xtr, ytr, groups))
+    log(f"C 值掃描：train {len(ytr)} 張 / {len(set(groups))} 群組 / {n_splits} 折")
+    best_c, best_f1 = None, -1.0
+    for c in cs:
+        f1s = []
+        for tr_i, va_i in splits:
+            clf = LogisticRegression(max_iter=2000, C=c, class_weight="balanced")
+            clf.fit(xtr[tr_i], ytr[tr_i])
+            f1s.append(f1_score(ytr[va_i], clf.predict(xtr[va_i]), average="macro", zero_division=0))
+        m = float(np.mean(f1s))
+        marker = ""
+        if m > best_f1:
+            best_c, best_f1 = c, m
+            marker = "  ← best"
+        log(f"  C={c:<8} macroF1 {m:.4f}{marker}")
+    log(f"→ 建議 C={best_c}（現行 DEFAULT_C={DEFAULT_C}）")
+    return best_c
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--probe", action="store_true", default=True)
     ap.add_argument("--split", default="v1")
     ap.add_argument("--model", default="siglip")
     ap.add_argument("-C", type=float, default=DEFAULT_C)
+    ap.add_argument("--tune-c", action="store_true", help="GroupKFold 掃 C，不訓練不存檔")
     a = ap.parse_args()
-    probe(a.split, a.model, a.C)
+    if a.tune_c:
+        tune_c(a.split, a.model)
+    else:
+        probe(a.split, a.model, a.C)

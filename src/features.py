@@ -21,6 +21,10 @@ MODELS = {
     # open_clip 名稱 → (model, pretrained)
     "siglip": ("ViT-B-16-SigLIP", "webli"),
     "clip": ("ViT-B-16", "openai"),
+    # 2026-09-06 encoder 基準用：384px 解析版（工地照的小缺失與密集紋理吃解析度）、
+    # SO400M（大四倍的線性探針天花板候選）。mps 上都能跑，384 版約 2.25× 時間。
+    "siglip384": ("ViT-B-16-SigLIP-384", "webli"),
+    "so400m": ("ViT-SO400M-14-SigLIP-384", "webli"),
 }
 
 
