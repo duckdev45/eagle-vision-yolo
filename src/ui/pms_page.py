@@ -1,4 +1,4 @@
-"""PMS 日報系統頁（① 同步 ② 資料總覽 ③ 照片 ④ 複核 ⑤ 歷史 ⑥ 標籤 ⑦ 報告）。"""
+"""PMS 日報系統頁（① 同步 ② 資料總覽 ③ 照片 ④ 複核 ⑤ 孤兒院 ⑥ 歷史 ⑦ 標籤 ⑧ 報告）。"""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from labels import Labeler
 from .common import badge, gem_line, run_step, txt, verdict
 from .data import labeled, load_manifest, local_preds
 from .legacy_ui import legacy_page
+from .orphan_ui import orphan_queue
 from .pipeline import evidence_view, pipeline_panel
 from .report_view import report_view
 from .review_ui import review_queue
@@ -191,9 +192,12 @@ def pms_page(tabs):
         review_queue()
 
     if tabs[4]:
-        legacy_page()
+        orphan_queue()
 
     if tabs[5]:
+        legacy_page()
+
+    if tabs[6]:
         st.subheader("labels.yaml")
         st.caption("順序即優先權，第一個命中者勝。改完存檔 → 重跑組織/切分即可，不必重新下載。")
         text = st.text_area("規則", paths.LABELS_YAML.read_text(), height=320)
@@ -257,7 +261,7 @@ def pms_page(tabs):
                     "常常是跨詞界的碎片（`櫃安` = 櫥櫃+安裝，因為它連「廚櫃」的錯字一起收）。"
                 )
 
-    if tabs[6]:
+    if tabs[7]:
         runs = (
             sorted(
                 [p for p in paths.REPORTS_OUT.glob("*") if p.is_dir() and "qms" not in p.name], reverse=True

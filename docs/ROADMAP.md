@@ -196,6 +196,19 @@ pass bar 是 recall ≥ 0.8 且 precision ≥ 0.6。三輪最好 32%，**FAIL**�
 - 教訓入檔：**工項型 title 的照片集會混前置階段**（貼磚工項混打底、木作混噴漆），
   標題規則的系統性極限——照片層級複核是唯一解，且 newclass/規則救不了這種
 
+**2026-09-06 孤兒院上線（OOD 隔離區，接住 fallback／無規則命中）**——佇列母體原本
+看不到這批（`drop_fallback` 排除後複核佇列也看不到）：
+
+- 操作台新增 **⑤ 孤兒院**（`ui/orphan_ui.py`）：孤兒卡＋**SigLIP 最近鄰 5 張縮圖**
+  （「棄土坑施作」的鄰居全是 舊基礎切削 0.90，一眼可裁）＋探針硬猜參考＋畢業鈕
+  （裁決寫 review.csv 進訓練）；候選詞挖礦（newclass 同款 greedy 覆蓋）內嵌。
+  `review.py --orphans` CLI 對等。embedding 索引走 `features.load` 全源合併
+  （只讀主檔的話 423 張 legacy 孤兒查無此人）
+- **`test_labels_yaml.py` 規則回歸測試**：46 個路由案例（真實標題）＋10 條載重順序
+  （v6–v13 註記裡「必須排在 XX 前面」全部釘死）——上線第一天就抓到 v11 的
+  `[Ee][Pp][Oo][Xx]` 對 `BFEproxy`（r 在 o 前）沒 match，15 張其實沒被收編（v14 修）
+- Streamlit AppTest 煙霧：孤兒院＋搬移後的全部 PMS 分頁渲染無例外
+
 **2026-09-02 C 型 41 份工序全掃完成**（`reference/iso/phases_manual.yaml`）——A 型只有分支節點
 （如外牆/內牆），沒有真正的施工順序，C 型才是這次全掃的對象：
 - 27 份讀 PDF SOP 條文/流程圖推出工序草稿，全部已人工核對蓋 `verifiedBy: duck`（2026-09-02）

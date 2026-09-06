@@ -49,12 +49,50 @@ def queue(split_name: str = "", since: str = "") -> pd.DataFrame:
     return q.sort_values(["tier", "syncedAt", "reportDate"], ascending=False, kind="stable")
 
 
+def orphan_queue() -> pd.DataFrame:
+    """孤兒：規則沒接住的照片（fallback / 無規則命中）。複核佇列的母體看不到它們。
+
+    `lab.apply` 的 drop_fallback 把這批排在 labeled 母體外，所以這裡自己撈——
+    操作台「⑤ 孤兒院」畫同一份（ui/orphan_ui.py）。
+    """
+    df, lab = _labeled_raw()
+    from core.review_utils import orphans as build_orphans
+
+    o = build_orphans(df, lab)
+    return o[~o.fileId.isin(load_reviews())]
+
+
+def _labeled_raw() -> tuple[pd.DataFrame, Labeler]:
+    """未丟 fallback 的母體（drop_small=False），孤兒偵測用。"""
+    from sync import _truthy
+
+    df = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
+    if "active" in df:
+        df = df[_truthy(df.active)]
+    lab = Labeler.load()
+    return df, lab
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", default="", help="用哪一版模型算「難分」，預設 CURRENT")
     ap.add_argument("--since", default="", help="只看 reportDate >= 這天的")
     ap.add_argument("--limit", type=int, default=30)
+    ap.add_argument("--orphans", action="store_true", help="看孤兒（規則沒接住的）而不是複核佇列")
     a = ap.parse_args()
+
+    cur = a.split or split_mod.current()
+    if a.orphans:
+        o = orphan_queue()
+        print(f"模型 {cur} · 孤兒 {len(o)} 張（規則沒接住，裁完才會進訓練）")
+        if not len(o):
+            print("沒有孤兒。")
+            sys.exit(0)
+        print(f"{'fileId':10} {'原因':8} {'reportDate':11} title")
+        for r in o.head(a.limit).itertuples():
+            print(f"{str(r.fileId)[:8]:10} {r.orphanWhy:8} {r.reportDate!s:11} {r.title}")
+        print("\n裁決要人做：`make app` → ⑤ 孤兒院（看鄰居決定歸哪類）。")
+        sys.exit(0)
 
     q = queue(a.split, a.since)
     cur = a.split or split_mod.current()

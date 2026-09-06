@@ -105,3 +105,73 @@ def build(
     ]
     q = df.assign(tier=tier, why=why, isTest=is_test)
     return q[q.tier > 0]
+
+
+def orphans(df: pd.DataFrame, lab: Labeler) -> pd.DataFrame:
+    """異類隔離區：規則沒命中的照片（cls = NaN 或 fallback）。
+
+    `Labeler.apply` 的 `drop_fallback` 把這批排拒在訓練與複核佇列之外——那對
+    訓練是對的（「其他 = 一袋雜物」實測 top-1 0.760 → 0.699），但「不倒進其他」
+    不等於「該丟掉」。人看一張裁一張，裁決寫進 review.csv 之後 `apply` 會收回來。
+
+    回傳加 `orphanWhy` 欄：`fallback`（有字但沒規則接）或 `無規則命中`（title 是
+    樓層編號之類的無語意字串）。純函式，操作台與 CLI 共用。
+    """
+    out = lab.apply(df, drop_small=False)
+    m = out.cls.isna() | (out.cls == lab.fallback)
+    o = out[m].copy()
+    o["orphanWhy"] = "fallback"
+    o.loc[o.cls.isna(), "orphanWhy"] = "無規則命中"
+    return o
+
+
+def embedding_index(model_key: str = "siglip", _mtime: float = 0.0) -> tuple[list[str], object]:
+    """L2 正規化後的 embedding 矩陣（fileIds, ndarray n×d），全資料源合併。
+
+    走 `features.load`（siglip + qms-siglip + legacy-siglip 合流）——孤兒與鄰居
+    兩邊都可能來自任何源，只讀主檔的話 legacy 孤兒會查無此人。mtime 進 cache
+    key 的責任在呼叫端（Streamlit cache_data 以參數為 key）。
+    """
+    import numpy as np
+
+    import features
+
+    ids, emb = features.load(model_key)
+    norm = np.linalg.norm(emb, axis=1, keepdims=True)
+    norm[norm == 0] = 1.0
+    return ids, emb / norm
+
+
+def neighbors(
+    file_id: str,
+    labels: dict,
+    model_key: str = "siglip",
+    k: int = 5,
+    _index: tuple[list[str], object] | None = None,
+) -> list[tuple[str, str, float]]:
+    """某張照片在 SigLIP 空間的 k 個最近**已分類**鄰居：[(fileId, cls, cosine)]。
+
+    孤兒照片裁決的依據不是模型預測（它只會在既有類別裡挑一個），是「隔壁那五張
+    長什麼樣、人給它們標了什麼」。cosine 相似度，排除自己；標籤來自 split 的
+    labels dict（train+test 都算——孤兒要的是參考答案，不是考題）。
+    """
+    import numpy as np
+
+    ids, emb = _index if _index is not None else embedding_index(model_key)
+    try:
+        i = ids.index(file_id)
+    except ValueError:
+        return []
+    sims = emb @ emb[i]
+    out: list[tuple[str, str, float]] = []
+    for j in np.argsort(-sims):
+        f = ids[int(j)]
+        if f == file_id:
+            continue
+        c = labels.get(f)
+        if c is None:
+            continue
+        out.append((f, c, float(sims[j])))
+        if len(out) >= k:
+            break
+    return out
