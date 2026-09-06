@@ -226,6 +226,23 @@ pass bar 是 recall ≥ 0.8 且 precision ≥ 0.6。三輪最好 32%，**FAIL**�
   同位異樣態=樣態歧義、單邊=漏標）→ 仲裁清單 gate_report.csv
 - 7 個新測試（XML 正規化/座標夾取/label 拒收/去重/框配對/分層保底），全套 91 綠
 
+**2026-09-06 訓練前置三件＋孤兒清空（CVAT 框落地前一輪備妥）**：
+
+- `yolo_dataset.py`：defects.csv 的 CVAT 框 → YOLO 資料集（images/labels/data.yaml），
+  **案場×日期群組切**（單群組退化成隨機切會明寫警告，僅供量測）、樣態 <min_boxes
+  整批不進。**imgsz 量測已跑**（GDINO 人審 16 框，640 下中位 103px、<16px 比例 0 →
+  640 可用；樣本小，正式框到位後重跑確認）——前置決策要求的量測補完
+- `g2_gate.py`：§7.2 三項離線檢查機械化——黃金集 coverage@precision≥0.90（不低於
+  baseline−2pt）、分組 CV macro-F1（每折重訓，不低於 baseline−1σ）、零 recall 類
+  （防小類被犧牲）。G1 仲裁完彈出 golden_labels.csv 即可跑，exit code 判可否上線
+- `contract_priority.py`：**97 項合約相依 REQUIRED 重排**（待決 #4 結案）——
+  機電 45 項完全沒工明（消防 14/電氣 15/給排水 10/電梯排風 5）＝最大 RAG 缺口；
+  門窗 21、裝修 14 次之；既有六份工明的族群未映射為 0。報告在
+  `reference/contract/priority.tsv`
+- 孤兒清空：PMS 8 張裁決完——棄土坑×2 →基礎-舊基礎切削（鄰居 0.87~0.90 全指向）；
+  除塵地墊/車道捲門/監控調整 6 張**無類可歸**（分類樹上沒有的工項，誠實留孤兒院
+  當新類候選，不硬塞）。剩 legacy 423 張照佇列節奏消化
+
 **2026-09-02 C 型 41 份工序全掃完成**（`reference/iso/phases_manual.yaml`）——A 型只有分支節點
 （如外牆/內牆），沒有真正的施工順序，C 型才是這次全掃的對象：
 - 27 份讀 PDF SOP 條文/流程圖推出工序草稿，全部已人工核對蓋 `verifiedBy: duck`（2026-09-02）

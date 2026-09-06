@@ -14,7 +14,7 @@ SPLIT_FLAGS := $(if $(LEGACY),--with-legacy,) \
                $(if $(MIN_TRAIN),--min-train $(MIN_TRAIN),) \
                $(if $(LEGACY_FILL),--legacy-fill $(LEGACY_FILL),)
 
-.PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases fr-demo fr-gdino cvat-export g1-sample
+.PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases fr-demo fr-gdino cvat-export g1-sample yolo-dataset contract-priority
 
 help:
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/	/'
@@ -104,3 +104,9 @@ cvat-export: ## 缺失框冷啟動：照片按案場×日期打成 CVAT task man
 
 g1-sample: ## G1 黃金集抽樣：trade 400 分層＋defect 樣態保底 30（不足標本輪不評）
 	uv run src/g1_sample.py
+
+yolo-dataset: ## defects.csv 的 CVAT 框 → YOLO 資料集＋imgsz 量測（--measure-gdino 只量測）
+	uv run src/yolo_dataset.py --out v1-defects
+
+contract-priority: ## 合約收集優先序重排（97 項合約相依 REQUIRED）
+	uv run src/contract_priority.py
