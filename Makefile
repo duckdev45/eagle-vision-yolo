@@ -14,7 +14,7 @@ SPLIT_FLAGS := $(if $(LEGACY),--with-legacy,) \
                $(if $(MIN_TRAIN),--min-train $(MIN_TRAIN),) \
                $(if $(LEGACY_FILL),--legacy-fill $(LEGACY_FILL),)
 
-.PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases fr-demo fr-gdino
+.PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases fr-demo fr-gdino cvat-export g1-sample
 
 help:
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/	/'
@@ -98,3 +98,9 @@ fr-gdino: ## 樂氧森缺失照片 × GDINO 煙霧測試（--all 全量；預設
 
 fr-demo: ## GDINO 標註 demo 操作台（照片牆＋人審打分）
 	uv run streamlit run src/fr_app.py
+
+cvat-export: ## 缺失框冷啟動：照片按案場×日期打成 CVAT task manifest（--source pms|field|golden）
+	uv run src/cvat_export.py --source pms --sample 300
+
+g1-sample: ## G1 黃金集抽樣：trade 400 分層＋defect 樣態保底 30（不足標本輪不評）
+	uv run src/g1_sample.py

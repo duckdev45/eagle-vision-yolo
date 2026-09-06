@@ -21,6 +21,13 @@ FEATURES = DERIVED / "features"
 SPLITS = DERIVED / "splits"
 TREE = DERIVED / "tree"  # 有結構的照片瀏覽樹（symlink）
 
+# --- 缺失軸資料契約（docs/specs/reject-qs-code.md §2）------------------------
+# 與 review.csv 同級不進 derived：append-only 的人寫層，重跑管線不會洗掉。
+# review.csv 是工種 cls 裁決，defects.csv 是缺失回報＋CVAT 框——正交維度分開放。
+DEFECTS = ROOT / "data" / "defects.csv"
+GOLDEN = ROOT / "data" / "golden"  # G1 黃金集：manifest + 兩位標註者的裁決
+CVAT = ROOT / "data" / "cvat"  # CVAT 進出：task manifest（匯出）與 XML（匯入暫存）
+
 # --- QMS 稽核照（另一個系統、另一套標籤，刻意不與日報混在同一棵樹）---------
 # --- 舊版 pptx 進度報告（第三個資料源）------------------------------------
 # 與日報同分佈（同一批工地主任、同一種構圖），但**不是**同一個系統產的，

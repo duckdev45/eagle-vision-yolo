@@ -209,6 +209,23 @@ pass bar 是 recall ≥ 0.8 且 precision ≥ 0.6。三輪最好 32%，**FAIL**�
   `[Ee][Pp][Oo][Xx]` 對 `BFEproxy`（r 在 o 前）沒 match，15 張其實沒被收編（v14 修）
 - Streamlit AppTest 煙霧：孤兒院＋搬移後的全部 PMS 分頁渲染無例外
 
+**2026-09-06 CVAT 橋接＋G1 工具備齊（執行序 #6/#7 的程式前置，人力進場即純標註）**：
+
+- `data/defects.csv` 契約落地（`core/defects.py`）：退回/LINE/CVAT 三軌同表 source 分流，
+  10 樣態 enum 與退回按鈕 spec 一致；CVAT 框一行一框、0~1000 相對座標、append-only
+  去重鍵 (fileId, source, defectType, box)
+- `cvat_export.py`：照片按**案場×日期**打成 task manifest（split 重切的前置條件）＋
+  cvat-cli 指令＋labels 清單；已產出 coldstart-20260906（300 張/116 tasks）與
+  golden-20260906（149 張）兩包
+- `cvat_import.py`：CVAT 1.1 XML → defects.csv；label 不在 10 樣態一律拒收列印
+  （拼錯的 label 靜默入庫＝YOLO 幽靈類）；座標夾回 0~1000、<6/1000 誤點丟棄
+- `g1_sample.py`：G1 manifest 已產出（`data/golden/g1_manifest.csv`）——trade 400 張
+  /21 類（每類保底 20、比例補位）、defect 149 張/10 樣態（8 樣態 <30 標**本輪不評**，
+  gateEligible=0）；README 帶標註紀則（兩人各標、紅筆圈照框缺失本體）
+- `g1_gate.py`：trade 同類一致率（人類天花板）＋defect 框配對（IoU≥0.5 同樣態=一致、
+  同位異樣態=樣態歧義、單邊=漏標）→ 仲裁清單 gate_report.csv
+- 7 個新測試（XML 正規化/座標夾取/label 拒收/去重/框配對/分層保底），全套 91 綠
+
 **2026-09-02 C 型 41 份工序全掃完成**（`reference/iso/phases_manual.yaml`）——A 型只有分支節點
 （如外牆/內牆），沒有真正的施工順序，C 型才是這次全掃的對象：
 - 27 份讀 PDF SOP 條文/流程圖推出工序草稿，全部已人工核對蓋 `verifiedBy: duck`（2026-09-02）
