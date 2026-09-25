@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -58,13 +59,14 @@ def trade_pool() -> pd.DataFrame:
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    import split as split_mod
     from labels import Labeler, labeled_manifest, legacy_manifest
 
     lab = Labeler.load()
     df = pd.concat([labeled_manifest(), legacy_manifest()], ignore_index=True)
     out = lab.apply(df, overrides={})
     try:
-        cur = json.loads((paths.SPLITS / "CURRENT").read_text().strip() or '""')
+        cur = split_mod.current()
         sp = json.loads((paths.SPLITS / f"{cur}.json").read_text())
         used = {**{f: "train" for f in sp["train"]}, **{f: "test" for f in sp["test"]}}
         out = out.assign(inCurrentSplit=out.fileId.map(lambda f: used.get(f, "")))
@@ -74,33 +76,55 @@ def trade_pool() -> pd.DataFrame:
 
 
 def sample_trade(pool: pd.DataFrame, n: int, floor: int, seed: int) -> pd.DataFrame:
-    """每類保底 floor 張（不足全收），名額按類別比例補到 n。"""
-    by_cls = {c: g.sample(frac=1, random_state=seed) for c, g in pool.groupby("cls")}
-    chosen: dict[str, set] = {}
-    picked: list[pd.DataFrame] = []
-    for c, g in by_cls.items():
-        take = g.head(floor)
-        chosen[c] = set(take.index)
-        picked.append(take)
-    rest = n - sum(len(p) for p in picked)
-    if rest > 0:  # 剩餘名額按類別張數比例補（大宗類仍占大宗，但弱類已有保底）
-        counts = pool.cls.value_counts()
-        total = counts.sum()
-        for c, g in by_cls.items():
-            extra = round(rest * counts.get(c, 0) / total)
-            got = g[~g.index.isin(chosen[c])].head(extra)
-            chosen[c] |= set(got.index)
-            picked.append(got)
-    sel = pd.concat(picked)
-    if len(sel) > n:  # 保底全收後超出 n → 從大宗類抽掉超額
-        over = len(sel) - n
-        for c in sel.cls.value_counts().index:
-            if over <= 0:
-                break
-            drop = sel[sel.cls == c].tail(over)
-            over -= len(drop)
-            sel = sel.drop(drop.index)
-    return sel.sample(frac=1, random_state=seed)  # 洗牌，標註順序不洩漏類別
+    """先保底，再按原類別比例分配剩餘名額；用最大餘數補齊整數配額。
+
+    小類不足 floor 時全收；保底總額超過 n 則拒絕，避免默默犧牲某類。
+    母體不足 n 時警告並全收。fileId 必須唯一，DataFrame index 可重複。
+    """
+    if n < 0 or floor < 0:
+        raise ValueError("n and floor must be non-negative")
+    if not {"fileId", "cls"} <= set(pool.columns):
+        raise ValueError("pool requires fileId and cls columns")
+    for col in ("fileId", "cls"):
+        if not pool[col].map(lambda v: isinstance(v, str) and bool(v.strip())).all():
+            raise ValueError(f"pool {col} must contain non-empty strings")
+    if not pool.fileId.is_unique:
+        raise ValueError("pool fileId must be unique; resolve duplicate photos before sampling")
+    if len(pool) < n:
+        warnings.warn(
+            f"Requested n={n}, but pool contains only {len(pool)} photos; returning all available photos",
+            UserWarning,
+            stacklevel=2,
+        )
+    if pool.empty:
+        return pool.copy()
+
+    # 以 ID 固定母體順序，避免來源列序或重複 index 改變抽樣結果。
+    ordered = pool.sort_values("fileId").reset_index(drop=True)
+    by_cls = {c: g.sample(frac=1, random_state=seed) for c, g in ordered.groupby("cls")}
+    counts = {c: len(g) for c, g in by_cls.items()}
+    take = {c: min(floor, size) for c, size in counts.items()}
+    minimum = sum(take.values())
+    if minimum > n:
+        raise ValueError(f"n={n} cannot satisfy floor={floor}: at least {minimum} photos are required")
+
+    rest = min(n, len(pool)) - minimum
+    while rest:
+        available = [c for c in by_cls if take[c] < counts[c]]
+        weight = sum(counts[c] for c in available)
+        quotas = {c: divmod(rest * counts[c], weight) for c in available}
+        for c in available:
+            extra = min(quotas[c][0], counts[c] - take[c])
+            take[c] += extra
+            rest -= extra
+        for c in sorted(available, key=lambda c: (-quotas[c][1], -counts[c], c)):
+            if rest and take[c] < counts[c]:
+                take[c] += 1
+                rest -= 1
+        # 類別容量不足留下的名額，下一輪按尚有照片的類別重新分配。
+
+    sel = pd.concat([g.head(take[c]) for c, g in by_cls.items()], ignore_index=True)
+    return sel.sample(frac=1, random_state=seed).reset_index(drop=True)
 
 
 def sample_defect(cap: int, seed: int) -> pd.DataFrame:

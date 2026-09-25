@@ -1,5 +1,10 @@
 # 🦅 Eagle Vision Project: System Architecture Design Guide (V2.0)
 
+> **2026-09-19 現行主線：PMS 施作項目（WORK_ITEM）照片工種分類＋新工種候選。**
+> 入口 `make pms-app`，盤點 `make pms-status`；設定後可用 `make pms-ai` 產生圖像＋標題分類建議。資料契約、審閱包及訓練方式見
+> [PMS 工種工作台](docs/PMS-CLASSIFICATION.md)。下方 V2.0 是較早的整體架構说明；
+> PMS 主線以新文件與 `pipeline/pms_workflow.py` 為準，操作台入口是 `src/app.py`。
+
 **Version:** 2.0
 **Date:** 2026-09-01（修訂：指令表對齊現行 Makefile，知識庫補落地數據）
 **Status:** **🚀 Architecture Complete (Logical)**

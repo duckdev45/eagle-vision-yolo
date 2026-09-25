@@ -10,6 +10,7 @@ import split as split_mod
 from .common import badge, txt
 from .data import labeled
 from .pipeline import _cams
+from .pms_ai import ai_panel, latest_suggestions, suggestion_card
 
 CANVAS_W = 460  # 畫布寬度（px）。框存的是 0~1000 比例，換裝置不會跑掉
 
@@ -77,11 +78,27 @@ def review_queue() -> None:
         st.success("這批裁完了。要讓裁決進到模型，回 ① 同步那頁重跑一次。")
         return
 
+    if ai_panel(q, key="pms_queue_ai") is not None:
+        st.cache_data.clear()
+        st.rerun()
+    reviewer = st.text_input("AI 建議確認者", key="pms_queue_reviewer", placeholder="採用 AI 建議時填寫")
+    suggestions = latest_suggestions()
     page_rows = list(q.iloc[(page - 1) * per : page * per].itertuples())
     for row0 in range(0, len(page_rows), 2):
         for col, r in zip(st.columns(2), page_rows[row0 : row0 + 2]):
             with col, st.container(border=True):
                 _review_card(r, classes, done, save_review, names)
+                if proposal := suggestions.get(r.fileId):
+                    from core import pms_review
+
+                    revision_key = f"pms_revision:queue:{r.fileId}"
+                    expected = st.session_state.setdefault(revision_key, pms_review.revision(r.fileId))
+                    if suggestion_card(
+                        proposal, reviewer, key=f"pms_queue_accept_{r.fileId}", expected_revision=expected
+                    ):
+                        st.session_state.pop(revision_key, None)
+                        st.cache_data.clear()
+                        st.rerun()
 
 
 def _patch_canvas() -> None:

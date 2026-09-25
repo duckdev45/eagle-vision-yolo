@@ -104,40 +104,20 @@ def run_pipeline(name: str, with_data: bool) -> None:
     ponytail: 同步阻塞，不做背景工作佇列。這是本機單人操作台，全鏈約 5~10 分鐘，
     Streamlit 撐得住；真的要邊跑邊用再說（那時候該用 make，不是加 job queue）。
     """
-    import evaluate as ev
-    import explain
-    import features
-    import journal
-    import prepare
-    import sync as sync_mod
-    import train as tr
+    from pipeline.pms_workflow import training_steps
 
-    # 這串必須與 Makefile 的 `data` + `model` 逐步對齊。兩邊漂開的話，
-    # 按鈕跑出來的 split 跟 `make model` 跑出來的不是同一份，分數就沒得比。
-    steps = []
-    if with_data:
-        steps += [
-            ("同步日報 + 照片", lambda log: sync_mod.sync(log=log)),
-            ("前處理", lambda log: prepare.run(kind="report", log=log)),
-            ("抽 embedding", lambda log: features.extract(log=log)),
-        ]
-    steps += [
-        # 人標框裁出來的塊也要有 embedding，否則新裁的框會靜靜被丟掉
-        # （實測 split 說 train 649，載進去只有 633）
-        ("抽裁切框 embedding", lambda log: features.extract_crops(log=log)),
-        (f"切分 {name}", lambda log: split_mod.build(name=name, log=log)),
-        ("訓練探針", lambda log: tr.probe(split_name=name, log=log)),
-        ("評估 + Gemini 基準線", lambda log: ev.run(split_name=name, run_tag=name, log=log)),
-        ("重算熱區快取", lambda log: explain.run_probe(split_name=name, log=log)),
-        ("重寫學習紀錄", lambda log: log("學習紀錄 →", journal.write())),
-    ]
+    try:
+        steps = training_steps(name, with_data)
+    except (ValueError, OSError) as exc:
+        st.error(str(exc))
+        return
     for title, fn in steps:
         with st.status(title, expanded=False) as box:
             buf = io.StringIO()
             with redirect_stdout(buf):
                 try:
                     fn(lambda *a: print(*a))
-                except Exception as e:
+                except (Exception, SystemExit) as e:
                     print(f"錯誤：{e}")
                     box.update(label=f"{title} — 失敗", state="error")
                     st.code(buf.getvalue())
@@ -151,6 +131,7 @@ def run_pipeline(name: str, with_data: bool) -> None:
 
 def pipeline_panel() -> None:
     st.markdown("**2. 重跑模型** — 兩顆的差別只在「要不要先抓新照片」")
+    st.caption("本入口只用 PMS 日報與其人工證據裁切，依案場與日期分組。候選、資訊不足及已排除照片暫停訓練。")
     cur = split_mod.current()
     st.caption(f"操作台現在看的是 **{cur}**。跑完**不會自動切換**，分數看過覺得可以，再按最下面那顆。")
     c1, c2, c3 = st.columns([2, 2, 2])
@@ -164,7 +145,7 @@ def pipeline_panel() -> None:
         "切分 → 訓練 → 評估 → 熱區 → 學習紀錄（含上面第 1 顆的工作）",
     )
     only = c3.button(
-        "▶ 只重跑模型", help="只改過 labels.yaml 或複核裁決時用。跳過前三步（與標籤無關），其餘一樣"
+        "▶ 只重跑模型", help="使用本機已有的 PMS 照片；增量補齊前處理與特徵後訓練，不抓遠端資料。"
     )
     c2.caption("有新照片")
     c3.caption("只改了標籤或裁決")

@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # src/
 
 import paths
 import split as split_mod
+from core.pms_source import work_items
 from core.review_utils import TIER_NAMES, build, scores
 from labels import Labeler, human_refs, load_reviews
 
@@ -31,6 +32,7 @@ def _labeled() -> tuple[pd.DataFrame, Labeler]:
     from sync import _truthy
 
     df = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
+    df = work_items(df)
     if "active" in df:
         df = df[_truthy(df.active)]
     lab = Labeler.load()
@@ -67,6 +69,7 @@ def _labeled_raw() -> tuple[pd.DataFrame, Labeler]:
     from sync import _truthy
 
     df = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
+    df = work_items(df)
     if "active" in df:
         df = df[_truthy(df.active)]
     lab = Labeler.load()

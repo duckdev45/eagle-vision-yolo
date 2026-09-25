@@ -10,7 +10,8 @@
     review_ui.py     複核佇列 + 標框畫布
     legacy_ui.py     歷史資料（舊 pptx）
     report_view.py   報告格式（PMS / QMS 共用）
-    pms_page.py      PMS 七分頁
+    pms_page.py      PMS 分頁路由
+    pms_workbench.py 照片工種分類、新工種候選與審閱包
     qms_page.py      QMS 四分頁
     standards_page.py 規範庫五分頁
 
@@ -28,6 +29,7 @@ import sys
 
 import streamlit as st
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(__file__))
 
 from ui.common import inject_css, nav
@@ -52,7 +54,16 @@ elif SYSTEM == "規範庫":
 else:
     pms_page(
         nav(
-            ["① 同步", "② 資料總覽", "③ 照片", "④ 複核佇列", "⑤ 孤兒院", "⑥ 歷史資料", "⑦ 標籤規則", "⑧ 報告"],
+            [
+                "① 同步",
+                "② 資料總覽",
+                "③ 照片工種",
+                "④ 進階複核",
+                "⑤ 新工種候選",
+                "⑥ 歷史資料",
+                "⑦ 標籤規則",
+                "⑧ 報告",
+            ],
             key="pms_nav",
         )
     )

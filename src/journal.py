@@ -44,6 +44,10 @@ def load_runs() -> list[dict]:
         if not mf or not mf.exists():
             continue
         m = json.loads(mf.read_text())
+        # 只收模型訓練 run。jev 的 A/B 報告也放 metrics.json，但 mode 是 "ab"，
+        # top1 是 byTitle 字典——混進來會把它的 F1 當上一版來比。
+        if m.get("mode") == "ab":
+            continue
         cfg_file = d / "config.json"
         cfg = json.loads(cfg_file.read_text()) if cfg_file.exists() else {}
         errs = [e for e in ((d / "errors").iterdir() if (d / "errors").is_dir() else [])]
@@ -78,7 +82,7 @@ def history_table(runs: list[dict]) -> str:
     ]
     prev = None
     for r in runs:
-        d = "" if prev is None else f"{r['top1'] - prev:+.4f}"
+        d = "" if prev is None or r["top1"] is None else f"{r['top1'] - prev:+.4f}"
         n = len([v for v in r["perClass"].values() if v.get("support", 0) > 0])
         g = "、".join(r["ghosts"]) if r["ghosts"] else ""
         out.append(

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>各工種施工工序總表</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* 配色取自 eagle-component Design System（Foundations / Colors） */
+  :root{
+    --surface-base:#f5f1ec; --surface-raised:#faf6ef; --surface-elevated:#fefcf8;
+    --text-primary:#1c1914; --text-secondary:#4a4038; --text-muted:#6b6056;
+    --border-subtle:#ddd8d0; --border-raised:#c4bdb4;
+    --accent-400:#b84e0c; --accent-500:#8c3a08;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--surface-base); color:var(--text-primary);
+    font-family:-apple-system,"PingFang TC","Microsoft JhengHei",Segoe UI,sans-serif;
+    line-height:1.6; padding:32px 20px 80px;
+  }
+  .wrap{max-width:980px; margin:0 auto}
+  h1{font-size:24px; margin:0 0 4px}
+  .subtitle{color:var(--text-muted); font-size:13.5px; margin-bottom:28px}
+  h2{
+    font-size:16px; margin:36px 0 12px;
+    padding:6px 12px; border-radius:8px; display:inline-block;
+  }
+  /* 十大類分類色，取自 primary / accent / success / warning / danger / neutral 的 dim+bold 配對，循環使用 */
+  .cat-1{background:#e4f2ec; color:#0e4030}   /* primary dim / primary-700 */
+  .cat-2{background:#fdeee6; color:#8c3a08}   /* accent dim / accent-500 */
+  .cat-3{background:#faeceb; color:#8c2e26}   /* danger dim / danger-bold */
+  .cat-4{background:#fef4cc; color:#724f00}   /* warning dim / warning-bold */
+  .cat-5{background:#e4eee8; color:#14603e}   /* success dim / success-bold */
+  .cat-6{background:#f0ede8; color:#343028}   /* neutral-50 / neutral-600 */
+  table{width:100%; border-collapse:collapse; font-size:13.5px; background:var(--surface-raised);
+        border-radius:10px; overflow:hidden; box-shadow:0 1px 2px rgba(28,25,20,.05)}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--border-subtle); vertical-align:top}
+  th{color:var(--text-muted); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.03em}
+  tr:last-child td{border-bottom:none}
+  .name{font-weight:600; white-space:nowrap; color:var(--text-primary)}
+  .flow{color:var(--text-secondary)}
+  .arrow{color:var(--border-raised); padding:0 2px}
+  .branch{margin:4px 0 4px 0}
+  .branch-label{color:var(--accent-400); font-size:12px; font-weight:700; margin-right:6px}
+  footer{margin-top:50px; color:var(--text-muted); font-size:12px; text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>工種 x 施工工序</h1>
+  <div class="subtitle">eagle-vision</div>
+
+  <h2 class="cat-1">1.　假設工程</h2>
+  <table>
+    <tr><th>工種</th><th>工序</th></tr>
+    <tr><td class="name">鷹架工程</td><td class="flow">定期檢查 <span class="arrow">→</span> 拆除 <span class="arrow">→</span> 施工圖面檢討 <span class="arrow">→</span> 進料/吊料 <span class="arrow">→</span> 組裝</td></tr>
+    <tr><td class="name">放樣工程</td><td class="flow">基準點設置 <span class="arrow">→</span> 地界線放樣 <span class="arrow">→</span> 擋土設施放樣 <span class="arrow">→</span> 地下室開挖測量 <span class="arrow">→</span> 結構體放樣 <span class="arrow">→</span> 室內隔間放樣</td></tr>
+    <tr><td class="name">施工電梯工程</td><td class="flow">定期保養檢查 <span class="arrow">→</span> 施工前研討 <span class="arrow">→</span> 材料進場/組裝 <span class="arrow">→</span> 結構體檢核 <span class="arrow">→</span> 拆除 <span class="arrow">→</span> 現場使用 <span class="arrow">→</span> 試車/移交 <span class="arrow">→</span> 爬昇</td></tr>
+    <tr><td class="name">施工塔吊工程</td><td class="flow">擬定施工計劃 <span class="arrow">→</span> 基礎施工或結構補強 <span class="arrow">→</span> 按裝 <span class="arrow">→</span> 定期保養檢查 <span class="arrow">→</span> 預留孔 <span class="arrow">→</span> 爬昇 <span class="arrow">→</span> 拆除 <span class="arrow">→</span> 試車/移交 <span class="arrow">→</span> 塔吊使用</td></tr>
+  </table>
+
+  <h2 class="cat-2">2.　基礎工程</h2>
+  <table>
+    <tr><th>工種</th><th>工序</th></tr>
+    <tr><td class="name">抽水工程</td><td class="flow">施工中注意事項</td></tr>
+    <tr><td class="name">CCP 工法工程</td><td class="flow">施工前研討 <span class="arrow">→</span> 高壓灌漿 <span class="arrow">→</span> 鑽孔</td></tr>
+    <tr><td class="name">連續壁工程</td><td class="flow">作業場施工 <span class="arrow">→</span> 施工前準備 <span class="arrow">→</span> 機具進場組裝/放樣 <span class="arrow">→</span> 整地/導溝施作</td></tr>
+    <tr><td class="name">預壘樁工程</td><td class="flow">準備工作及樁位放樣 <span class="arrow">→</span> 鑽掘樁孔 <span class="arrow">→</span> 施工機具進場/按裝 <span class="arrow">→</span> 鋼筋籠製作及吊放 <span class="arrow">→</span> 帽樑施作 <span class="arrow">→</span> 注入水泥砂漿</td></tr>
+    <tr><td class="name">鋼板樁工程</td><td class="flow">打釘鋼板樁 <span class="arrow">→</span> 清除地下障礙物 <span class="arrow">→</span> 架設鋼板 <span class="arrow">→</span> 土方開挖、架設支撐 <span class="arrow">→</span> 放樣 <span class="arrow">→</span> 樁孔回填 <span class="arrow">→</span> 拔樁</td></tr>
+    <tr><td class="name">鋼軌樁工程</td><td class="flow">清除地下障礙物 <span class="arrow">→</span> 放樣 <span class="arrow">→</span> 開挖土方嵌入襯板 <span class="arrow">→</span> 主樁植入 <span class="arrow">→</span> 架設支撐 <span class="arrow">→</span> 拔樁</td></tr>
+    <tr><td class="name">開挖工程</td><td class="flow">開挖前準備 <span class="arrow">→</span> 開挖/運棄</td></tr>
+    <tr><td class="name">安全支撐工程</td><td class="flow">
+      <div class="branch"><span class="branch-label">架設</span>施工前準備 <span class="arrow">→</span> 指定基準點/基準線 <span class="arrow">→</span> 放樣 <span class="arrow">→</span> 中間樁打設 <span class="arrow">→</span> 架設三角托架 <span class="arrow">→</span> 架設圍令支撐 <span class="arrow">→</span> 密實確認 <span class="arrow">→</span> 施加預力 <span class="arrow">→</span> 中間樁與結構體區隔</div>
+      <div class="branch"><span class="branch-label">拆除</span>解壓 <span class="arrow">→</span> 鬆螺絲 <span class="arrow">→</span> 支撐圍令拆除 <span class="arrow">→</span> 中間樁拔除</div>
+    </td></tr>
+    <tr><td class="name">安全監測系統工程</td><td class="flow">擬定監測系統施工計劃 <span class="arrow">→</span> 儀器按裝 <span class="arrow">→</span> 總結報告 <span class="arrow">→</span> 量測及分析報告</td></tr>
+  </table>
+
+  <h2 class="cat-3">3.　結構體工程</h2>
+  <table>
+    <tr><th>工種</th><th>工序</th></tr>
+    <tr><td class="name">混凝土澆置工程</td><td class="flow">板面清潔與濕潤 <span class="arrow">→</span> 高度確認 <span class="arrow">→</span> 澆置順序 <span class="arrow">→</span> 搗實 <span class="arrow">→</span> 整理（蜂窩修補/鏝刀抹平）</td></tr>
+    <tr><td class="name">鋼筋續接工程</td><td class="flow">準備工作 <span class="arrow">→</span> 續接尺寸/數量確認 <span class="arrow">→</span> 鋼筋裁切車牙 <span class="arrow">→</span> 裝續接器保護套 <span class="arrow">→</span> 材料進場 <span class="arrow">→</span> 吊料分配 <span class="arrow">→</span> 組接 <span class="arrow">→</span> 測試</td></tr>
+    <tr><td class="name">植筋工程</td><td class="flow">放樣 <span class="arrow">→</span> 鑽孔 <span class="arrow">→</span> 清理鑽孔 <span class="arrow">→</span> 灌注環氧樹脂 <span class="arrow">→</span> 插入鋼筋 <span class="arrow">→</span> 拉拔試驗</td></tr>
+    <tr><td class="name">鋼骨工程</td><td class="flow">高拉力螺栓 <span class="arrow">→</span> 銲接中 <span class="arrow">→</span> 按裝及固定 <span class="arrow">→</span> 架設及組立 <span class="arrow">→</span> 放樣 <span class="arrow">→</span> 準備 <span class="arrow">→</span> 銲接後 <span class="arrow">→</span> 剪力釘植釘 <span class="arrow">→</span> 焊接前準備 <span class="arrow">→</span> 吊裝 <span class="arrow">→</span> 銲接前</td></tr>
+  </table>
+
+  <h2 class="cat-4">4.　泥作工程</h2>
+  <table>
+    <tr><th>工種</th><th>工序</th></tr>
+    <tr><td class="name">砌紅磚工程</td><td class="flow">紅磚浸水 <span class="arrow">→</span> 放樣定墨線 <span class="arrow">→</span> 校核門框垂直 <span class="arrow">→</span> 砌磚 <span class="arrow">→</span> 填縫清潔</td></tr>
+    <tr><td class="name">泥作粉刷工程</td><td class="flow">施工前清潔濕潤 <span class="arrow">→</span> 放樣灰誌 <span class="arrow">→</span> 鋪面 <span class="arrow">→</span> 打底 <span class="arrow">→</span> 粉光 <span class="arrow">→</span> 出線盒處理 <span class="arrow">→</span> 塞水路/滴水線 <span class="arrow">→</span> 完工清潔</td></tr>
+    <tr><td class="name">貼壁磚工程</td><td class="flow">磁磚計劃訂定 <span class="arrow">→</span> 舖貼面整修/打底 <span class="arrow">→</span> 貼面放樣 <span class="arrow">→</span> 貼磁磚 <span class="arrow">→</span> 填縫勾縫 <span class="arrow">→</span> 磁磚清洗</td></tr>
+    <tr><td class="name">貼地磚工程</td><td class="flow">磁磚計劃訂定 <span class="arrow">→</span> 舖貼面整修/打底 <span class="arrow">→</span> 貼面放樣 <span class="arrow">→</span> 貼磁磚 <span class="arrow">→</span> 填縫勾縫 <span class="arrow">→</span> 磁磚清洗 <span class="arrow">→</span> 防地磚隆起（條件式）</td></tr>
+    <tr><td class="name">地坪粉刷工程</td><td class="flow">清潔濕潤 <span class="arrow">→</span> 純水泥漿塗佈+水泥砂漿鋪面 <span class="arrow">→</span> 洩水坡度施工 <span class="arrow">→</span> 加鋪鐵絲網/基準灰誌（條件式） <span class="arrow">→</span> 粉光面驗收</td></tr>
+    <tr><td class="name">輕質磚工程</td><td class="flow">施工前準備及檢查 <span class="arrow">→</span> 第一層磚施工 <span class="arrow">→</span> 第二層以上磚施工 <span class="arrow">→</span> 與 RC 牆接合 <span class="arrow">→</span> 與木門框配合 <span class="arrow">→</span> 與水電配管配合 <span class="arrow">→</span> 防水工程施工 <span class="arrow">→</span> 批土工程施工 <span class="arrow">→</span> 與廚具/衛浴接合</td></tr>
+  </table>
+
+  <h2 class="cat-5">5.　裝修工程</h2>
+  <table>
+    <tr><th>工種</th><th>工序</th></tr>
+    <tr><td class="name">油漆工程</td><td class="flow">整平、磨平 <span class="arrow">→</span> 補土 <span class="arrow">→</span> 底漆、面漆</td></tr>
+    <tr><td class="name">石材工程</td><td class="flow">勾縫、填漿 <span class="arrow">→</span> 乾式施工 <span class="arrow">→</span> 濕式施工 <span class="arrow">→</span> 地坪施工</td></tr>
+    <tr><td class="name">輕鋼架平頂工程</td><td class="flow">圖面確認 <span class="arrow">→</span> 實地放樣 <span class="arrow">→</span> 收邊樣 <span class="arrow">→</span> 主架/副架 <span class="arrow">→</span> 水電消防管路 <span class="arrow">→</span> 封板</td></tr>
+    <tr><td class="name">耐磨地坪工程</td><td class="flow">停車場耐磨地坪 <span class="arrow">→</span> 中途層施作 <span class="arrow">→</span> 施工注意事項 <span class="arrow">→</span> 耐磨砂層施作 <span class="arrow">→</span> 塗層總厚度量測 <span class="arrow">→</span> 斜坡式車道耐磨地坪 <span class="arrow">→</span> 封塵處理 <span class="arrow">→</span> 面漆施工前查驗 <span class="arrow">→</span> 材料用量 <span class="arrow">→</span> 施工方式 <span class="arrow">→</span> 地坪粉光 <span class="arrow">→</span> 灰誌製作 <span class="arrow">→</span> 地坪固化</td></tr>
+    <tr><td class="name">踢腳板工程</td><td class="flow">材料進場檢查 <span class="arrow">→</span> 施工面清潔確認 <span class="arrow">→</span> 施工樣品確認 <span class="arrow">→</span> 固定安裝 <span class="arrow">→</span> 轉角裁切按裝 <span class="arrow">→</span> 驗收清潔</td></tr>
+    <tr><td class="name">扶手工程</td><td class="flow">放樣 <span class="arrow">→</span> 組裝 <span class="arrow">→</span> 表面處理</td></tr>
+    <tr><td class="name">木作工程</td><td class="flow">粗構架施作 <span class="arrow">→</span> 油漆及五金配件 <span class="arrow">→</span> 裝飾面/裝飾條施作</td></tr>
+    <tr><td class="name">線板工程</td><td class="flow">材料進場比對樣品 <span class="arrow">→</span> 待粉光完成後放樣抓水平線 <span class="arrow">→</span> 45° 截角接合施工 <span class="arrow">→</span> 驗收</td></tr>
+    <tr><td class="name">鐵件工程</td><td class="flow">進料檢驗 <span class="arrow">→</span> 安裝調整</td></tr>
+    <tr><td class="name">廚具工程</td><td class="flow">繪製施工大樣圖 <span class="arrow">→</span> 進場材料檢查 <span class="arrow">→</span> 器具按裝裝配 <span class="arrow">→</span> 水平校正調整 <span class="arrow">→</span> 踢腳板按裝 <span class="arrow">→</span> 排水軟管按裝 <span class="arrow">→</span> 矽利康填縫 <span class="arrow">→</span> 驗收檢查</td></tr>
+    <tr><td class="name">木作平頂工程</td><td class="flow">圖面確認 <span class="arrow">→</span> 天花格柵 <span class="arrow">→</span> 封板及收邊料 <span class="arrow">→</span> 實地放樣 <span class="arrow">→</span> 水電/消防/空調管線</td></tr>
+    <tr><td class="name">輕質灌漿牆工程</td><td class="flow">圖面確認 <span class="arrow">→</span> 實地放樣 <span class="arrow">→</span> 浴室止水墩施作 <span class="arrow">→</span> 鍍鋅骨架安裝 <span class="arrow">→</span> 單面封板 <span class="arrow">→</span> 水電配管 <span class="arrow">→</span> 另一面封板 <span class="arrow">→</span> 灌漿 <span class="arrow">→</span> 接縫及釘孔批土</td></tr>
+  </table>
+
+  <h2 class="cat-6">6.　門窗工程</h2>
+  <table>
+    <tr><th>工種</th><th>工序</th></tr>
+    <tr><td class="name">木門框扇組立工程</td><td class="flow">
+      <div class="branch"><span class="branch-label">門框組立</span>進料 <span class="arrow">→</span> 搬運 <span class="arrow">→</span> 放樣確認 <span class="arrow">→</span> 組立 <span class="arrow">→</span> 校閱 <span class="arrow">→</span> 維護</div>
+      <div class="branch"><span class="branch-label">門扇按裝</span>現場尺寸確認 <span class="arrow">→</span> 進料 <span class="arrow">→</span> 搬運 <span class="arrow">→</span> 按裝 <span class="arrow">→</span> 校閱 <span class="arrow">→</span> 維護</div>
+    </td></tr>
+    <tr><td class="name">鋁門窗工程</td><td class="flow">圖面確認 <span class="arrow">→</span> 現廠丈量 <span class="arrow">→</span> 進料/檢驗 <span class="arrow">→</span> 按裝</td></tr>
+    <tr><td class="name">防火門工程</td><td class="flow">得標後前置文件 <span class="arrow">→</span> 製造 <span class="arrow">→</span> 按裝 <span class="arrow">→</span> 檢驗</td></tr>
+    <tr><td class="name">不鏽鋼門窗工程</td><td class="flow">得標後前置 <span class="arrow">→</span> 製造 <span class="arrow">→</span> 按裝</td></tr>
+    <tr><td class="name">鐵捲門工程</td><td class="flow">進料檢驗 <span class="arrow">→</span> 按裝調整 <span class="arrow">→</span> 清潔維護</td></tr>
+    <tr><td class="name">玻璃工程</td><td class="flow">按裝</td></tr>
+    <tr><td class="name">門窗嵌縫工程</td><td class="flow">嵌縫施作 <span class="arrow">→</span> 施作後之清潔</td></tr>
+    <tr><td class="name">帷幕牆工程</td><td class="flow">繪製施工圖 <span class="arrow">→</span> 標準圖面確認 <span class="arrow">→</span> 放樣/預埋鐵件 <span class="arrow">→</span> 進料/檢驗 <span class="arrow">→</span> 組裝（骨架/板牆） <span class="arrow">→</span> 板牆填縫 <span class="arrow">→</span> 清潔維護</td></tr>
+    <tr><td class="name">塑鋼門工程</td><td class="flow">
+      <div class="branch"><span class="branch-label">門框組立</span>進料 <span class="arrow">→</span> 搬運 <span class="arrow">→</span> 樣品確認 <span class="arrow">→</span> 組立</div>
+      <div class="branch"><span class="branch-label">門扇按裝</span>現場尺寸確認 <span class="arrow">→</span> 進料 <span class="arrow">→</span> 搬運 <span class="arrow">→</span> 按裝 <span class="arrow">→</span> 校閱 <span class="arrow">→</span> 維護</div>
+    </td></tr>
+  </table>
+
+  <h2 class="cat-1">7.　防水隔熱工程</h2>
+  <table>
+    <tr><th>工種</th><th>工序</th></tr>
+    <tr><td class="name">防水工程</td><td class="flow">清水池 <span class="arrow">→</span> 浴廁 <span class="arrow">→</span> 污水池/消防水池/電梯機坑 <span class="arrow">→</span> 屋頂及中庭</td></tr>
+    <tr><td class="name">泡沫混凝土工程</td><td class="flow">屋面清理/落水頭保護 <span class="arrow">→</span> 保麗龍分格固定 <span class="arrow">→</span> 洩水坡度控制 <span class="arrow">→</span> 拌合配比 <span class="arrow">→</span> 澆置整平 <span class="arrow">→</span> 灑水養護48hr <span class="arrow">→</span> 切割伸縮縫 <span class="arrow">→</span> 挖除保麗龍填縫</td></tr>
+    <tr><td class="name">水池防水工程</td><td class="flow">原樓板防水 <span class="arrow">→</span> 第一層防水（五層） <span class="arrow">→</span> 水泥砂漿防護 <span class="arrow">→</span> 第二層防水 <span class="arrow">→</span> 貼磁磚或石材 <span class="arrow">→</span> 試水72hr</td></tr>
+  </table>
+
+  <h2 class="cat-2">8.　工程材料</h2>
+  <table>
+    <tr><th>工種</th><th>工序</th></tr>
+    <tr><td class="name">鋼筋材料</td><td class="flow">進場目視檢查</td></tr>
+    <tr><td class="name">熔接鋼絲網材料</td><td class="flow">進場目測檢查</td></tr>
+  </table>
+
+  <h2 class="cat-3">9.　機電工程</h2>
+  <table>
+    <tr><th>工種</th><th>工序</th></tr>
+    <tr><td class="name">電氣工程</td><td class="flow">RC 澆置前查驗（電氣/弱電部份） <span class="arrow">→</span> 裝修工程查驗</td></tr>
+    <tr><td class="name">給排水工程</td><td class="flow">RC 澆置前查驗 <span class="arrow">→</span> 裝修工程查驗</td></tr>
+    <tr><td class="name">消防工程</td><td class="flow">RC 澆置前查驗 <span class="arrow">→</span> 裝修工程查驗</td></tr>
+    <tr><td class="name">發電機工程</td><td class="flow">搬運 <span class="arrow">→</span> 定位 <span class="arrow">→</span> 按裝（五系統整合） <span class="arrow">→</span> 啟動測試</td></tr>
+    <tr><td class="name">電梯工程</td><td class="flow">圖面確認 <span class="arrow">→</span> 製作 <span class="arrow">→</span> 按裝及試車</td></tr>
+    <tr><td class="name">機械停車設備工程</td><td class="flow">施工前研討 <span class="arrow">→</span> 進料/檢驗 <span class="arrow">→</span> 現場按裝</td></tr>
+    <tr><td class="name">污水處理工程</td><td class="flow">預留連通管/透氣孔 <span class="arrow">→</span> 頂版預留人孔 <span class="arrow">→</span> 處理槽防水粉光 <span class="arrow">→</span> 內部構造施工 <span class="arrow">→</span> 化糞槽外施工 <span class="arrow">→</span> 試車及水質化驗 <span class="arrow">→</span> 正式啟用</td></tr>
+  </table>
+
+  <h2 class="cat-4">10.　其他</h2>
+  <table>
+    <tr><th>工種</th><th>工序</th></tr>
+    <tr><td class="name">植栽工程</td><td class="flow">前置設施 <span class="arrow">→</span> 排水孔埋管 <span class="arrow">→</span> 喬木 <span class="arrow">→</span> 灌木 <span class="arrow">→</span> 地被植物 <span class="arrow">→</span> 花草 <span class="arrow">→</span> 草皮 <span class="arrow">→</span> 灌溉設施 <span class="arrow">→</span> 每日養護巡查</td></tr>
+    <tr><td class="name">公共設施修護工程</td><td class="flow">
+      <div class="branch"><span class="branch-label">排水溝</span>測量高程 <span class="arrow">→</span> 挖掘 <span class="arrow">→</span> 打溝底 PC <span class="arrow">→</span> 配鋼筋 <span class="arrow">→</span> 澆置 RC <span class="arrow">→</span> 水溝蓋鋪設</div>
+      <div class="branch"><span class="branch-label">柏油道路</span>材料查驗 <span class="arrow">→</span> 路基壓實 <span class="arrow">→</span> 管線挖過處理 <span class="arrow">→</span> 瀝青鋪設滾壓</div>
+    </td></tr>
+    <tr><td class="name">動土典禮辦理流程</td><td class="flow">動土擇日 <span class="arrow">→</span> 審查/審核 <span class="arrow">→</span> 籌備 <span class="arrow">→</span> 場地佈置 <span class="arrow">→</span> 典禮舉行 <span class="arrow">→</span> 場地復舊整理</td></tr>
+  </table>
+
+</div>
+</body>
+</html>

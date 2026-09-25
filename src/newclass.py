@@ -111,12 +111,14 @@ def candidates(
 
 def pools(src: str = "all") -> tuple[Counter, Counter, Labeler]:
     """({沒命中的標題: 張數}, {命中的標題: 張數}, Labeler)。"""
+    from core.pms_source import work_items
     from sync import _truthy
 
     lab = Labeler.load()
     frames = []
     if src in ("all", "pms"):
         m = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
+        m = lab.drop_excluded(work_items(m))
         frames.append(m[_truthy(m.active)][["title"]].assign(src="pms"))
     if src in ("all", "legacy") and paths.LEGACY_MANIFEST.exists():
         lg = pd.read_csv(paths.LEGACY_MANIFEST, dtype=str, keep_default_na=False, na_values=[""])

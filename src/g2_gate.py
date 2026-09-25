@@ -35,8 +35,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import features as features_mod
 import split as split_mod
+from core.evaluation_metrics import PRECISION_BAR, coverage_at_precision
 
-PRECISION_BAR = 0.90
 COVERAGE_SLACK = 0.02  # 不低於 baseline − 2pt
 F1_SLACK_SIGMA = 1.0  # 不低於 baseline − 1σ
 
@@ -61,21 +61,16 @@ def golden(path: str) -> pd.DataFrame:
 
 
 def eval_probe(clf, X, y) -> dict:
+    if not len(y):
+        raise ValueError("eval_probe requires at least one labeled sample")
+    y = np.asarray(y)
     p = clf.predict_proba(X)
     classes = list(clf.classes_)
     idx = p.argmax(1)
     pred = np.array([classes[i] for i in idx])
     conf = p[np.arange(len(p)), idx]
     correct = pred == y
-    # coverage@precision：按信心降序走，取「precision(k) ≥ bar」的最大 k/N。
-    # precision 對 k 不是單調的，所以全程掃描取最大，不是第一個跌破就停。
-    order = np.argsort(-conf)
-    cov = 0.0
-    seen_c = 0
-    for rank, i in enumerate(order, start=1):
-        seen_c += int(correct[i])
-        if seen_c / rank >= PRECISION_BAR:
-            cov = rank / len(y)
+    cov = coverage_at_precision(correct, conf, precision_bar=PRECISION_BAR)
     per_class = {}
     for c in sorted(set(y)):
         m = y == c

@@ -25,6 +25,7 @@ from core.labeler import (
     orphan_reviews,
     save_review,
 )
+from core.pms_source import work_items
 
 
 def pending_classes(df: pd.DataFrame = None, lab: Labeler = None) -> pd.DataFrame:
@@ -45,6 +46,7 @@ def pending_classes(df: pd.DataFrame = None, lab: Labeler = None) -> pd.DataFram
         df = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
         if "active" in df:
             df = df[_truthy(df.active)]
+        df = work_items(df)
     full = lab.apply(df, drop_small=False)
     full = full[full.cls != lab.fallback]
     n = full.cls.value_counts()
@@ -86,6 +88,7 @@ def unclaimed(df: pd.DataFrame = None, lab: Labeler = None) -> pd.DataFrame:
         df = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
         if "active" in df:
             df = df[_truthy(df.active)]
+        df = work_items(df)
     out = lab.apply(df, drop_small=False)
     return out[out.cls == lab.fallback]
 
@@ -122,6 +125,7 @@ def labeled_manifest(active_only: bool = True, with_legacy: bool = False) -> pd.
     分開套會得到兩套不同的類別集合，接不起來（舊資料正好補的就是原本不足被 drop 的類）。
     """
     df = pd.read_csv(paths.MANIFEST)
+    df = work_items(df)
     if active_only and "active" in df:
         df = df[df.active.astype(str).str.lower().isin(["true", "1"])]
     df = df.assign(dataset="pms")

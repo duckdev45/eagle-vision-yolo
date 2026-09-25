@@ -43,6 +43,7 @@ class Labeler:
         self.excl_dates = {str(d) for d in (excl.get("dates") or [])}
         self.excl_created_by = {str(u) for u in (excl.get("createdBy") or [])}
         self.excl_status = {str(s) for s in (excl.get("status") or [])}
+        self.excl_sites = {str(s) for s in (excl.get("sites") or [])}
         self.drop_future = bool(excl.get("future_dates", True))
 
     @classmethod
@@ -78,6 +79,8 @@ class Labeler:
             out = out[~out.createdBy.astype(str).isin(self.excl_created_by)]
         if self.excl_status and "status" in out:
             out = out[~out.status.astype(str).isin(self.excl_status)]
+        if self.excl_sites and "constrName" in out:
+            out = out[~out.constrName.astype(str).isin(self.excl_sites)]
         return out
 
     def apply(
@@ -103,6 +106,10 @@ class Labeler:
         if ov and "fileId" in out:  # 測試用的小 DataFrame 沒有 fileId 欄
             hit = out.fileId.map(ov)
             out.loc[hit.notna(), "cls"] = hit[hit.notna()]
+        if overrides is None and "fileId" in out:
+            from core.pms_store import blocked_ids
+
+            out = out[~out.fileId.isin(blocked_ids())]
         out = out[out.cls.notna()]
         # 人工複核裁的類別不會是 fallback，所以放在覆蓋之後排除是安全的
         if drop_small and self.drop_fallback:
@@ -140,7 +147,9 @@ def orphan_reviews(lab: Labeler | None = None) -> dict[str, str]:
     當成小類別丟掉——**人審過的照片就這樣無聲消失**。這個函式讓它出聲。
     """
     lab = lab or Labeler.load()
-    valid = {lb for _, lb in lab.rules} | {lab.fallback}
+    from core.pms_store import approved_classes
+
+    valid = {lb for _, lb in lab.rules} | {lab.fallback} | set(approved_classes())
     return {f: c for f, c in load_reviews().items() if c not in valid}
 
 

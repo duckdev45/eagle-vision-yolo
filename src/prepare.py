@@ -31,6 +31,7 @@ CORNER_W, CORNER_H = 0.30, 0.12  # 日報膠囊：四角
 # 留 margin 吸收機型解析度差異。
 WATERMARK = (0.0, 0.60, 0.56, 1.0)  # (x0, y0, x1, y1) 比例
 LONG_EDGE = 512
+MIN_PHOTO_BYTES = 1024  # 與 sync 的下載門檻一致；更小的 raw 不是可用照片
 FILL = (127, 127, 127)
 CLEAN_FROM = "2026-08-14"  # 這天起日報照存乾淨 raw，畫面上不再有膠囊
 
@@ -96,13 +97,18 @@ def run(force: bool = False, kind: str = "report", log=print) -> dict:
     paths.ensure_dirs()
     src_dir, out_dir = SRC_DIRS[kind]
     clean = clean_ids() if kind == "report" else set()  # QMS 浮水印照樣烤死，全遮
-    done = skipped = failed = unmasked = 0
+    done = skipped = failed = unmasked = invalid = 0
     for src in sorted(src_dir.iterdir()):
         if not src.is_file() or src.name.startswith("."):
             continue
         dst = out_dir / f"{src.stem}.jpg"
         if dst.exists() and not force:
             skipped += 1
+            continue
+        size = src.stat().st_size
+        if kind == "report" and size < MIN_PHOTO_BYTES:
+            log(f"  跳過壞檔 {src.name}: {size} bytes（原檔保留，等待同步補抓）")
+            invalid += 1
             continue
         try:
             is_clean = src.stem in clean
@@ -112,7 +118,7 @@ def run(force: bool = False, kind: str = "report", log=print) -> dict:
         except Exception as e:
             log(f"  失敗 {src.name}: {e}")
             failed += 1
-    stat = {"processed": done, "skipped": skipped, "failed": failed, "unmasked": unmasked}
+    stat = {"processed": done, "skipped": skipped, "failed": failed, "unmasked": unmasked, "invalid": invalid}
     log(f"前處理完成：{stat}")
     return stat
 

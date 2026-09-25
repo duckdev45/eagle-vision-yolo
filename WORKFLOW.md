@@ -1,5 +1,10 @@
 # 訓練工作流設計（Training Workflow Design）
 
+> **2026-09-19 PMS 主線補充**：日報照片工種分類與新工種候選採
+> [PMS-CLASSIFICATION.md](docs/PMS-CLASSIFICATION.md) 的狀態與資料契約。
+> `make pms-model`／`make pms-retrain` 與操作台共用 PMS 專用步驟，關閉 legacy 補樣；
+> 人工候選、資訊不足及排除照片暫停訓練。新類核准定義後仍需逐張人工確認。
+
 > 狀態：**v1** · 2026-08-17 · 對應 `labels.yaml` v5 · 撰寫者 duck
 > 這份文件是流程的契約。程式碼與它不符時，先改文件或先改碼——但不要讓兩邊各說各話。
 

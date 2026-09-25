@@ -65,6 +65,9 @@ def queue(split_name: str = "") -> Any:
     from sync import _truthy
 
     df = pd.read_csv(_p.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
+    from core.pms_source import work_items
+
+    df = work_items(df)
     if "active" in df:
         df = df[_truthy(df.active)]
     df = labeler.apply(df)

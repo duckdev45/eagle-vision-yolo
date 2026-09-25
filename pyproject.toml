@@ -21,6 +21,8 @@ dependencies = [
     # 而框的用途是餵訓練，標得不準等於餵髒資料，這個依賴省不得。
     "streamlit-drawable-canvas>=0.9",
     "pandas-stubs~=3.0.5",
+    "openpyxl>=3.1.5",
+    "typesafe-sdk>=0.7.0",
 ]
 
 [project.optional-dependencies]

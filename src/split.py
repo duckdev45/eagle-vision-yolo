@@ -23,8 +23,10 @@ import os
 import sys
 from datetime import date
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(__file__))
 import paths
+from core.labeler import Labeler
 from labels import labeled_manifest
 
 # 操作台與解釋工具要看哪一組。存成檔案而不是原始碼常數，操作台的按鈕才改得動
@@ -248,7 +250,24 @@ def build(
         # min_class_size 是**合併後**才算的（labels.py 的設計），所以光是載進 legacy
         # 就會讓幾個 PMS 張數不足的類別復活，考卷跟著變（實測 test 132 → 136）。
         # legacy_fill 只該加訓練資料，不該改考卷——把類別集合鎖回 PMS 自己算的那組。
-        keep = set(labeled_manifest(with_legacy=False).cls)
+        #
+        # **鎖的集合不能用 labeled_manifest(with_legacy=False)**（v15 修）：
+        # 那已經跑過 min_class_size drop，PMS 只有零星幾張的類別整類被砍 →
+        # 集合裡沒有它 → 下一行把合併後復活的它視為「不在 PMS 類別集合」濾掉，
+        # legacy 補訓練的機會也一起被沒收。實測：防水-嵌縫 PMS 2 張、legacy 46 張，
+        # v38/v39 split 裡整類消失。
+        #
+        # 正確的鎖集合 = **PMS 規則認得的類別**，與張數門檻完全無關。
+        # 張數門檻（min_class_size / small_class: drop）是對**合併後的訓練集**算的，
+        # 在這裡對 PMS 單獨算一次等於用錯分母提前砍人。fallback 不收是規則定的
+        # （drop_fallback: true），不是張數問題，仍然排除。
+        # 從 df 自己算（不重讀 manifest）。這裡 df 已含 legacy，但鎖集合看的是
+        # **規則認得哪些類別**——與張數無關，所以直接取 df.cls 的集合扣掉 fallback；
+        # legacy 帶進來而 PMS 沒有的類，下一行的 log 會唸出來再被濾掉。
+        # 用 df.cls 而不是重讀 manifest：測試 monkeypatch labeled_manifest 時
+        # 才不會繞過它去讀真資料。
+        _lab = Labeler.load()
+        keep = {c for c in df.cls.dropna().unique() if c != _lab.fallback}
         if extra := sorted(set(df.cls) - keep):
             log(f"  載入 legacy 讓 {len(extra)} 個類別復活，鎖回 PMS 的類別集合：{extra}")
         df = df[df.cls.isin(keep)]

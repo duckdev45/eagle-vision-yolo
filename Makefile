@@ -5,6 +5,8 @@
 #
 # SPLIT 每次要給新名字，別原地覆蓋——標籤一變，同名舊報告的分母就對不上了。
 
+.DEFAULT_GOAL := pms-app
+
 SPLIT ?= v8
 LEGACY ?=                       # LEGACY=1 → 把舊 pptx 那批**全部**加進 train（會多 9 類）
 MIN_TRAIN ?= 12                 # 稀有類別訓練保底：含它的測試日整天搬回 train
@@ -15,6 +17,31 @@ SPLIT_FLAGS := $(if $(LEGACY),--with-legacy,) \
                $(if $(LEGACY_FILL),--legacy-fill $(LEGACY_FILL),)
 
 .PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases fr-demo fr-gdino cvat-export g1-sample yolo-dataset contract-priority
+.PHONY: pms-app pms-status pms-candidates pms-export pms-import pms-model pms-retrain pms-ai
+
+pms-ai: ## OpenAI 看圖與標題分類；ARGS='--limit 4'，只保存建議
+	uv run src/pms.py ai $(ARGS)
+
+pms-app: ## PMS 工種操作台（基本相依即可看圖與人工分類）
+	uv run streamlit run src/app.py
+
+pms-status: ## PMS 照片分類與待複核盤點（唯讀）
+	uv run src/pms.py status
+
+pms-candidates: ## PMS 新工種候選與未知標題群組（唯讀）
+	uv run src/pms.py candidates
+
+pms-export: ## 匯出看圖審閱包；ARGS='--out data/pms-review/batch.zip --limit 12'
+	uv run src/pms.py export $(ARGS)
+
+pms-import: ## 匯入 AI 建議；ARGS='--input data/pms-review/response.json'
+	uv run src/pms.py import $(ARGS)
+
+pms-model: ## 只用本機 PMS 照片訓練；SPLIT 必須是新版本名
+	$(TRAIN) src/pms.py train --name "$(SPLIT)"
+
+pms-retrain: ## 同步 PMS 後訓練；不自動切換目前模型
+	$(TRAIN) src/pms.py train --name "$(SPLIT)" --sync
 
 help:
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/	/'
@@ -53,6 +80,9 @@ newclass: ## 沒被規則認領的照片 → 下一批新工種的候選詞
 qs: ## 公司 QS 標準統計（A~E 佔比、請款靶、合約相依、各份工序階段）
 	uv run src/qsdata.py
 
+qs-excel: ## QS 標準 + 檢查項匯出 Excel（reports/QS標準總表.xlsx，給同事查閱）
+	uv run src/qs_excel.py
+
 contract: ## 合約工作約定統計（付款節點、罰則、驗收數值、QS 交叉引用）
 	uv run src/contractdata.py
 
@@ -76,7 +106,7 @@ sync: ## 只抓新日報與照片
 	uv run src/sync.py
 
 test: ## 自檢（含 QS 資料層 + 合約資料層；reference/ 為公司資料不入 git，缺席則跳過）
-	uv run --with pytest pytest tests/test_core.py -q
+	uv run --with pytest pytest tests/ -q -rs
 	@if [ -d reference/iso/raw ]; then uv run src/qsdata.py --self-check; \
 	else echo "⚠ reference/ 不在（公司資料不入 git）——跳過 QS 自檢"; fi
 	@if [ -d reference/contract/raw ]; then uv run src/contractdata.py --self-check; \
@@ -110,3 +140,22 @@ yolo-dataset: ## defects.csv 的 CVAT 框 → YOLO 資料集＋imgsz 量測（--
 
 contract-priority: ## 合約收集優先序重排（97 項合約相依 REQUIRED）
 	uv run src/contract_priority.py
+
+jev-eval: ## Jev vs labels.yaml regex A/B（真標籤 = review.csv 人工裁決）
+	uv run src/jev_label_eval.py $(ARGS)
+
+jev-fallback: ## regex 沒有意見那桶（drop_fallback），Jev 救得回多少
+	uv run src/jev_label_eval.py --fallback-probe $(ARGS)
+
+jev-doc: ## Jev 探測結果 → 看圖複核活文件（規則補丁提案＋真標籤矛盾）
+	uv run src/jev_review_doc.py $(ARGS)
+
+jev-orphan: ## 孤兒照片（QS 有標準、labels.yaml 沒類）→ 看圖複核活文件
+	uv run src/jev_orphan_doc.py $(ARGS)
+
+jev-policy: ## Jev 判定「哪些工種該現在寫規則」（政策合成在程式碼，模型只答語義）
+	uv run src/jev_newclass_policy.py
+
+jev-newclass-doc: ## 把 Jev 說它決定不了的那 148 張做成看圖複核文件
+	uv run src/jev_newclass_doc.py
+	@echo "  open reports/2026-09-19-jev/NEWCLASS-REVIEW.html"

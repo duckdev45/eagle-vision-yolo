@@ -29,9 +29,10 @@ def load_manifest() -> pd.DataFrame:
 
 def labeled() -> pd.DataFrame:
     """加上 cls，並帶上人寫的兩個參考答案（clsChips / specTrade）給複核佇列用。"""
+    from core.pms_source import work_items
     from labels import human_refs
 
-    df = load_manifest()
+    df = work_items(load_manifest())
     if not len(df):
         return df
     lab = Labeler.load()
