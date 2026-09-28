@@ -1,0 +1,35 @@
+[project]
+name = "eagle-vision-api"
+version = "0.1.0"
+description = "Standalone PMS photo inference and feedback API"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "fastapi>=0.120,<1",
+    "uvicorn>=0.35,<1",
+    "numpy>=2,<3",
+    "pillow>=12,<13",
+    "torch>=2.4,<3",
+    "torchvision",  # open_clip 的相依；列成直接相依，下面的 CPU index 才管得到它
+    "open_clip_torch==3.3.0",
+    "safetensors>=0.6,<1",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.16"]
+
+[tool.uv]
+package = false
+
+# 正式主機跑 CPU 推論；PyPI 的 linux torch 會連帶裝約 11GB CUDA 相依。
+# macOS 的 PyPI wheel 本來就沒有 CUDA，照舊走 PyPI。
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

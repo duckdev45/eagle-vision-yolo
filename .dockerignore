@@ -1,0 +1,14 @@
+# Only the independent API code and a locally exported, private model bundle enter the image.
+**
+!service/
+!service/Dockerfile
+!service/pyproject.toml
+!service/uv.lock
+!service/vision_api/
+!service/vision_api/**
+service/vision_api/**/__pycache__/**
+service/vision_api/**/*.pyc
+!models/
+!models/service/
+!models/service/v43/
+!models/service/v43/**
