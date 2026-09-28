@@ -25,8 +25,9 @@ def _snapshot():
     name = split_mod.current()
     files = [
         paths.SPLITS / f"{name}.json",
-        paths.MODELS / f"probe-siglip-{name}.pkl",
-        paths.FEATURES / "siglip.npz",
+        split_mod.probe_path(name),
+        paths.FEATURES / f"{split_mod.encoder(name)}.npz",
+        paths.MANIFEST,  # 工項融合要看兄弟照，manifest 變了分數也會變
     ]
     stamp = tuple(
         (str(p), p.stat().st_mtime_ns, p.stat().st_size) if p.exists() else (str(p), 0, 0) for p in files
@@ -126,8 +127,20 @@ def _photo_card(row: dict, reviewer: str, known: list[str]) -> None:
     if row["modelConfidence"] is not None and pd.notna(row["modelConfidence"]):
         model += f"（分數 {row['modelConfidence']:.2f}）"
     st.write(f"照片模型：{model}")
+    if row.get("stageDecision") == "title":
+        st.caption("打底／粉光階段由標題決定（照片模型只確定是泥作打底/粉光群）")
+    source = review.DEFECT_SOURCES.get(row.get("defectSource") or "", "")
+    st.write(f"缺失旗標：{'是' if row.get('defectFlag') else '否'}" + (f"（{source}）" if source else ""))
     if row["reviewReason"]:
         st.caption(row["reviewReason"])
+    with st.form(f"pms_defect_{fid}"):
+        defect = st.checkbox("這張是缺失改善照（與工種分開記錄）", value=bool(row.get("defectFlag")))
+        if st.form_submit_button("儲存缺失旗標"):
+            try:
+                review.set_defect(fid, defect, reviewer=reviewer)
+                _refresh("已保存缺失旗標；工種裁決不受影響。")
+            except (ValueError, OSError) as exc:
+                st.error(str(exc))
     with st.expander("日報參考資訊"):
         st.write({"標題": row["title"], "查驗重點": row["chipsOn"], "前端工種": row["specKey"]})
     rev_key = f"pms_revision:{fid}"
@@ -174,6 +187,7 @@ def _photos_page(df: pd.DataFrame, reviewer: str) -> None:
             "全部",
             "尚無分類",
             "模型尚未涵蓋",
+            "缺失旗標",
             *[v for k, v in review.STATES.items() if k != "pending"],
         ],
         key="pms_photo_filter",
@@ -186,6 +200,8 @@ def _photos_page(df: pd.DataFrame, reviewer: str) -> None:
         view = view[view.route == "unknown"]
     elif kind == "模型尚未涵蓋":
         view = view[view.route == "known_untrained"]
+    elif kind == "缺失旗標":
+        view = view[view.defectFlag.astype(bool)]
     elif kind != "全部":
         state = next(key for key, label in review.STATES.items() if label == kind)
         view = view[view.reviewState == state]

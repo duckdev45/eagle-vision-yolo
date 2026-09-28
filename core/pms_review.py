@@ -9,6 +9,7 @@ from __future__ import annotations
 import io
 import json
 import pickle
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from PIL import Image, ImageOps
 
 import paths
 from core import pms_store as store
+from core.evaluation_metrics import REVIEW_CONFIDENCE, fuse_work_items
 from core.labeler import Labeler, load_boxes, load_reviews, save_review
 from core.pms_source import work_items
 
@@ -104,15 +106,88 @@ def photo_bytes(file_id: str) -> bytes:
     return buf.getvalue()
 
 
+def work_item_keys(df: pd.DataFrame) -> dict[str, str]:
+    """fileId → 工項 key（同日報 × 同標題）。缺日報 id 的照片不融合（key 空字串）。"""
+    if "dailyReportInfoId" not in df:
+        return {}
+    rid = df.dailyReportInfoId.fillna("").astype(str)
+    title = df.title.fillna("").astype(str) if "title" in df else ""
+    keys = (rid + "|" + title).where(rid != "", "")
+    return dict(zip(df.fileId.astype(str), keys))
+
+
+# ── 缺失旗標（v17：與工種正交）──────────────────────────────────────────
+# 與 labels.yaml 雜項-缺失改善規則同一組字。旗標＝人工（最優先）＞標題缺失字｜defect-probe 圖像分數。
+DEFECT_TITLE = "缺失|缺改|美容|修繕"
+DEFECT_SOURCES = {"human": "人工", "title": "標題", "image": "圖像"}
+
+
+def defect_title(title) -> bool:
+    return isinstance(title, str) and bool(re.search(DEFECT_TITLE, title))
+
+
+def set_defect(file_id: str, defect: bool, *, reviewer: str) -> None:
+    """人工改缺失旗標。只寫事件庫，不動 review.csv 的工種裁決。"""
+    _photos([file_id])
+    store.append([("defect", file_id, {"defect": bool(defect), "reviewer": _reviewer(reviewer)})])
+
+
+# ── 泥作打底／粉光分層判斷 ────────────────────────────────────────────────
+# 兩者是 QS0402 的前後兩個工序，計價分開，不合併。圖像只負責判「泥作打底/粉光群」；
+# 群內信心夠（≥ STAGE_GROUP）但階段不確定（較大那個佔群內 < STAGE_SHARE）時看標題：
+# 標題明確寫打底或粉光就用標題，沒寫就送人工。門檻用 v42 分組 OOF 在人工裁決照上選
+# （半切選參、另一半評：人工照準確率 +1.9pt，CI [0, +4.0]；人工照上「標題有階段字」
+# 與人工答案 0 衝突）。
+STAGE_CLASSES = ("泥作-打底", "泥作-粉光")
+STAGE_GROUP = 0.6
+STAGE_SHARE = 0.8
+STAGE_MANUAL = "泥作打底／粉光階段待人工"
+
+
+def title_stage(title) -> str:
+    """標題明確只寫一個階段才算數；兩個都寫（打底/粉光）或都沒寫 → 空字串。"""
+    t = title if isinstance(title, str) else ""
+    base, finish = "打底" in t, bool(re.search("粉光|粉刷", t))
+    return STAGE_CLASSES[0] if base and not finish else STAGE_CLASSES[1] if finish and not base else ""
+
+
+def resolve_stage(proba, classes, title) -> tuple[str, str]:
+    """(最終類別, 決定來源 model|title|manual)。manual 時類別仍回模型的 top1 供參考。"""
+    classes = [str(c) for c in classes]
+    top = classes[int(np.argmax(proba))]
+    if not all(c in classes for c in STAGE_CLASSES):
+        return top, "model"
+    pb, pf = (float(proba[classes.index(c)]) for c in STAGE_CLASSES)
+    group = pb + pf
+    if group < STAGE_GROUP or max(pb, pf) / group >= STAGE_SHARE:
+        return top, "model"
+    stage = title_stage(title)
+    return (stage, "title") if stage else (top, "manual")
+
+
 def local_model() -> dict:
-    """只使用 PMS 特徵主檔，回傳真正的 train/test/unseen 與模型類別。"""
+    """只使用 PMS 特徵主檔，回傳真正的 train/test/unseen 與模型類別。
+
+    預測用工項融合（同日報×同標題的兄弟照一起看，core.evaluation_metrics.fuse_work_items），
+    v40 同卷 top1 0.852 → 0.911；信心與邊際也是融合後的值。
+    """
     import split as split_mod
 
     name = split_mod.current()
-    result = {"name": name, "classes": [], "scores": {}, "train": [], "test": [], "warning": ""}
+    result = {
+        "name": name,
+        "classes": [],
+        "scores": {},
+        "stage": {},
+        "defectScore": {},
+        "defectThreshold": None,
+        "train": [],
+        "test": [],
+        "warning": "",
+    }
     spath = paths.SPLITS / f"{name}.json"
-    model = paths.MODELS / f"probe-siglip-{name}.pkl"
-    feature = paths.FEATURES / "siglip.npz"
+    model = split_mod.probe_path(name)
+    feature = paths.FEATURES / f"{split_mod.encoder(name)}.npz"
     if spath.exists():
         sp = json.loads(spath.read_text())
         result.update(train=sp.get("train", []), test=sp.get("test", []))
@@ -125,18 +200,38 @@ def local_model() -> dict:
     if not feature.exists():
         result["warning"] = "PMS 圖像特徵尚未建立，模型預測暫缺。"
         return result
+    pool = load_pool()
+    keys = work_item_keys(pool)
+    titles = dict(zip(pool.fileId, pool.title)) if "title" in pool else {}
     with np.load(feature, allow_pickle=True) as z:
-        proba = clf.predict_proba(z["emb"])
-        order = np.sort(proba, axis=1)
-        result["scores"] = {
-            str(fid): (
-                str(clf.classes_[int(p.argmax())]),
-                float(p.max()),
-                float(order[i, -1] - order[i, -2]) if len(p) > 1 else 0.0,
-            )
-            for i, (fid, p) in enumerate(zip(z["fileIds"], proba))
-        }
+        file_ids = [str(f) for f in z["fileIds"]]
+        emb = z["emb"]
+    item_keys = [keys.get(f, "") for f in file_ids]
+    proba = fuse_work_items(clf.predict_proba(emb), item_keys)
+    order = np.sort(proba, axis=1)
+    for i, (fid, p) in enumerate(zip(file_ids, proba)):
+        pred, source = resolve_stage(p, clf.classes_, titles.get(fid, ""))
+        result["scores"][fid] = (
+            pred,
+            float(p.max()),
+            float(order[i, -1] - order[i, -2]) if len(p) > 1 else 0.0,
+        )
+        if source != "model":
+            result["stage"][fid] = source
+    result.update(_defect_scores(file_ids, emb, item_keys, split_mod.encoder(name)))
     return result
+
+
+def _defect_scores(file_ids: list[str], emb, item_keys: list[str], encoder: str) -> dict:
+    """defect-probe（src/defect_probe.py 存的 models/defect-probe-{encoder}.pkl）→ 工項融合分數。"""
+    path = paths.MODELS / f"defect-probe-{encoder}.pkl"
+    if not path.exists():
+        return {}
+    with path.open("rb") as fh:
+        art = pickle.load(fh)  # 本機受信任的訓練產物
+    p = art["clf"].predict_proba(emb)[:, 1]
+    fused = fuse_work_items(np.c_[1 - p, p], item_keys)[:, 1]
+    return {"defectScore": dict(zip(file_ids, fused.astype(float))), "defectThreshold": art["threshold"]}
 
 
 def revision(file_id: str) -> str:
@@ -161,6 +256,7 @@ def snapshot(model: dict | None = None) -> tuple[pd.DataFrame, dict]:
     human = load_reviews()
     decisions = store.active_decisions()
     suggestions = {r["fileId"]: r for r in store.events("suggestion")}
+    defect_marks = store.latest("defect")
     trained, train_ids, test_ids = set(model["classes"]), set(model["train"]), set(model["test"])
     version = catalog_version()
     rows = []
@@ -189,8 +285,25 @@ def snapshot(model: dict | None = None) -> tuple[pd.DataFrame, dict]:
             reasons.append("照片模型與標籤不同")
         if margin is not None and margin < 0.25 and part != "train":
             reasons.append("照片模型難分")
+        elif conf is not None and conf < REVIEW_CONFIDENCE and part != "train":
+            reasons.append("照片模型信心低")
         if not pred:
             reasons.append("尚無照片模型預測")
+        if model.get("stage", {}).get(fid) == "manual" and not reviewed:
+            reasons.append(STAGE_MANUAL)
+        if label == "雜項-缺失改善" and not reviewed:
+            reasons.append("缺失改善照：工種待看圖確認")
+        score = model.get("defectScore", {}).get(fid)
+        threshold = model.get("defectThreshold")
+        human_defect = defect_marks.get(fid)
+        if human_defect is not None:
+            defect, defect_source = bool(human_defect["defect"]), "human"
+        elif defect_title(r["title"]):
+            defect, defect_source = True, "title"
+        elif score is not None and threshold is not None and score >= threshold:
+            defect, defect_source = True, "image"
+        else:
+            defect, defect_source = False, ""
         suggestion = suggestions.get(fid, {})
         current_suggestion = bool(suggestion) and suggestion.get("catalogVersion") == version
         if current_suggestion:
@@ -205,6 +318,10 @@ def snapshot(model: dict | None = None) -> tuple[pd.DataFrame, dict]:
                 "ruleClass": rule,
                 "humanClass": reviewed,
                 "modelClass": pred,
+                "stageDecision": model.get("stage", {}).get(fid, "model" if pred else ""),
+                "defectFlag": defect,
+                "defectSource": defect_source,
+                "defectScore": score,
                 "modelConfidence": conf,
                 "modelMargin": margin,
                 "part": part,
@@ -220,6 +337,10 @@ def snapshot(model: dict | None = None) -> tuple[pd.DataFrame, dict]:
         "ruleClass",
         "humanClass",
         "modelClass",
+        "stageDecision",
+        "defectFlag",
+        "defectSource",
+        "defectScore",
         "modelConfidence",
         "modelMargin",
         "part",

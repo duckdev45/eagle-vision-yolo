@@ -52,6 +52,20 @@ def test_manual_photo_confirmation_in_ui(pms_env):
     assert store.active_decisions()["a"]["reviewer"] == "ui-tester"
 
 
+def test_defect_flag_toggle_in_ui_keeps_trade_verdict(pms_env):
+    result = app("photos").run()
+    result.text_input(key="pms_reviewer").set_value("ui-tester")
+    result.text_input(key="pms_photo_search").set_value("打底施作").run()
+    next(box for box in result.checkbox if box.label.startswith("這張是缺失改善照")).check()
+    next(button for button in result.button if button.label == "儲存缺失旗標").click().run()
+    assert not result.exception and not result.error
+    assert store.latest("defect")["a"]["defect"] is True
+    assert not paths.REVIEW.exists()  # 缺失旗標不寫 review.csv，工種裁決不動
+    df, _ = review.snapshot()
+    row = df.set_index("fileId").loc["a"]
+    assert bool(row.defectFlag) and row.defectSource == "human"
+
+
 def test_candidate_approval_in_ui_does_not_auto_label(pms_env):
     key = review.propose_candidate("裝修-消音板", ["u1", "u2"], reviewer="tester", definition="板材孔洞")
     result = app("candidates").run()

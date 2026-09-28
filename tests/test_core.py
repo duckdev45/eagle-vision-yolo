@@ -90,7 +90,9 @@ def test_rule_order_is_the_contract():
     # 粉光排在打底前面：兩者關鍵字不重疊，但粉光是完成面查驗，寫在先讀起來順（v9 拆分）
     assert L.label("13F內部牆面粉光") == "泥作-粉光"
     # 判不出階段的殘餘字樣（泥作/抹灰/砌/吊線）預設歸打底，不強猜
-    assert L.label("泰舜初驗泥作缺失改善") == "泥作-打底"
+    assert L.label("3F塔吊區三角架位泥作打底") == "泥作-打底"
+    # v16：但「泥作 × 缺失改善」先歸缺失改善——看圖是補磚/打鑿/美容，不是打底
+    assert L.label("泰舜初驗泥作缺失改善") == "雜項-缺失改善"
     # 三個泥作類是兄弟，前綴必須一致
     assert L.label("室內地磚貼飾") == "泥作-地磚貼飾"
     assert L.label("9F浴室壁磚貼飾") == "泥作-壁磚貼飾"
@@ -120,7 +122,9 @@ def test_no_rule_is_permanently_shadowed():
     那種要人工判斷「該歸哪類」的案例不同。
     """
     L = Labeler.load()
-    kws = [(lab, pat.pattern.split("|")) for pat, lab in L.rules]
+    # 前瞻式（`(?=…)(?=…)`）是「兩組字都要有」的交集規則，拆 `|` 當關鍵字清單不成立，
+    # 也不可能整個擋住較晚的單一關鍵字（v16 的 泥作/輕隔間 × 缺失改善）——不納入這個機械檢查。
+    kws = [(lab, pat.pattern.split("|")) for pat, lab in L.rules if "(?=" not in pat.pattern]
     dead = []
     for i, (lab_i, kw_i) in enumerate(kws):
         for lab_j, kw_j in kws[i + 1 :]:
@@ -130,7 +134,10 @@ def test_no_rule_is_permanently_shadowed():
                 for ki in kw_i:
                     if ki and kj and ki in kj:
                         dead.append(f"{lab_i}[{ki}] 擋住 {lab_j}[{kj}]")
-    assert not dead, "發現永遠不會命中的規則，補一條 test_rule_order_is_the_contract 案例或調整關鍵字：\n" + "\n".join(dead)
+    assert not dead, (
+        "發現永遠不會命中的規則，補一條 test_rule_order_is_the_contract 案例或調整關鍵字：\n"
+        + "\n".join(dead)
+    )
 
 
 def test_class_names_follow_convention():
