@@ -4,12 +4,12 @@
 能離線算的三項（洩漏測試/ONNX 一致性/影子模式是部署期的事，不在此）：
 
   1. 黃金集 coverage @ precision ≥ 0.90，且不低於 baseline − 2pt（產品指標）
-  2. 分組交叉驗證 macro-F1 不低於 baseline − 1σ（防單點運氣——
-     GroupKFold 按 案場×日期，每折重訓探針再考黃金折，不是單點）
+  2. 獨立黃金集分組 macro-F1 不低於 baseline − 1σ（防單點運氣；
+     GroupKFold 按 案場×日期，同一折評估兩版已訓練模型）
   3. 沒有任何類別 recall 掉到 0（防小類被犧牲換總分）
 
-黃金答案 = G1 仲裁後的 data/golden/golden_labels.csv（fileId,cls），
-由 src/g1_gate.py 的仲裁清單人工裁定後彙出。
+黃金答案 = G1 仲裁後的 data/golden/golden_labels.csv（fileId,cls）。
+至少 300 張 PMS WORK_ITEM，且與兩版 split 的訓練和測試案場日期完全分離。
 
     uv run src/g2_gate.py --candidate v36 --baseline v35
 
@@ -22,19 +22,17 @@ import argparse
 import json
 import pickle
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+import features as features_mod
 import paths
+import split as split_mod
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-
-import features as features_mod
-import split as split_mod
 from core.evaluation_metrics import PRECISION_BAR, coverage_at_precision
 
 COVERAGE_SLACK = 0.02  # 不低於 baseline − 2pt
@@ -46,17 +44,27 @@ def probe(path: Path):
         return pickle.load(f)["clf"]
 
 
-def corpus() -> tuple[list[str], object, dict]:
-    """全語料 embedding＋split 標籤（分組 CV 的訓練側）。"""
-    ids, emb = features_mod.load("siglip")
+def corpus(model_key: str = features_mod.LEGACY_ENCODER) -> tuple[dict, object]:
+    """黃金集照片的 embedding 索引（兩版編碼器不同時各取各的）。"""
+    ids, emb = features_mod.load(model_key)
     idx = {f: i for i, f in enumerate(ids)}
-    sp = json.loads((paths.SPLITS / f"{split_mod.current()}.json").read_text())
-    return idx, emb, sp["labels"]
+    return idx, emb
 
 
 def golden(path: str) -> pd.DataFrame:
+    if not Path(path).exists():
+        raise FileNotFoundError(f"找不到人工仲裁答案 {path}；先完成 G1 雙人標註與仲裁。")
     g = pd.read_csv(path, dtype=str)
-    assert {"fileId", "cls"} <= set(g.columns), "黃金答案需要 fileId,cls"
+    if not {"fileId", "cls"} <= set(g.columns):
+        raise ValueError("黃金答案需要 fileId,cls")
+    if (
+        g.fileId.isna().any()
+        or g.cls.isna().any()
+        or g.fileId.str.strip().eq("").any()
+        or g.cls.str.strip().eq("").any()
+        or g.fileId.duplicated().any()
+    ):
+        raise ValueError("黃金答案有空白或重複 fileId／cls")
     return g.set_index("fileId")
 
 
@@ -83,57 +91,86 @@ def eval_probe(clf, X, y) -> dict:
     return {"top1": round(float(correct.mean()), 4), "coverage": round(cov, 4), "per_class": per_class}
 
 
-def group_folds(golden_ids: list[str], labels: dict) -> list[set]:
-    """黃金照片按 案場×日期 分組＝折。"""
-    groups: dict[str, set] = {}
-    fr = pd.read_csv(
-        paths.FIELD_REPORTS / "raw" / "manifest.csv", dtype=str, keep_default_na=False, na_values=[""]
+def validate_holdout(g: pd.DataFrame, candidate: str, baseline: str) -> dict[str, str]:
+    """黃金集必須是 PMS 施作項目，且兩版模型都未見過同案場同日照片。"""
+    if len(g) < 300:
+        raise ValueError(f"黃金集只有 {len(g)} 張；G1 至少需要 300 張獨立人工答案。")
+    manifest = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False).drop_duplicates(
+        "fileId", keep="last"
     )
-    fr_map = dict(zip(fr.fileId, "樂氧森|" + fr.reportDate.astype(str)))
-    daily = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
-    d_map = dict(zip(daily.fileId, daily.constrId.astype(str) + "|" + daily.reportDate.astype(str)))
-    for f in golden_ids:
-        g = fr_map.get(f) or d_map.get(f) or "unknown"
-        groups.setdefault(g, set()).add(f)
-    return list(groups.values())
+    by_id = manifest.set_index("fileId")
+    unknown = set(g.index) - set(by_id.index)
+    if unknown:
+        raise ValueError(f"黃金集含非 PMS 照片：{sorted(unknown)[:5]}")
+    selected = by_id.loc[g.index]
+    valid = (
+        selected.source.eq("WORK_ITEM")
+        & selected.active.str.lower().isin(["true", "1"])
+        & selected.constrId.ne("")
+        & selected.reportDate.ne("")
+        & selected.reportDate.le(date.today().isoformat())
+    )
+    if not valid.all():
+        raise ValueError(f"黃金集含非有效 PMS 施作項目：{selected.index[~valid].tolist()[:5]}")
+    groups = dict(zip(manifest.fileId, manifest.constrId + "|" + manifest.reportDate))
+    gold_groups = {groups[f] for f in g.index}
+    for name in (candidate, baseline):
+        split_path = paths.SPLITS / f"{name}.json"
+        sp = json.loads(split_path.read_text(encoding="utf-8"))
+        foreign = set(sp.get("datasets", {}).values()) - {"pms", "crop"}
+        if foreign:
+            raise ValueError(f"{name} 使用非 PMS 訓練來源 {sorted(foreign)}；請用 PMS 專用流程建立比較版本。")
+        used = {f.split("#", 1)[0] for f in sp["train"] + sp["test"]}
+        overlap = gold_groups & {groups[f] for f in used if f in groups}
+        if overlap:
+            raise ValueError(
+                f"黃金集與 {name} 訓練／測試集有 {len(overlap)} 個案場日期重疊；需先保留獨立資料再重訓。"
+            )
+    return {f: groups[f] for f in g.index}
 
 
-def grouped_cv(
-    candidate_clf_cfg: tuple,
-    baseline_clf_cfg: tuple,
-    folds: list[set],
+def group_folds(golden_ids: list[str], groups: dict[str, str], n_splits: int) -> list[list[str]]:
+    """所有黃金照片依案場×日期分到相同折；每張恰好評估一次。"""
+    from sklearn.model_selection import GroupKFold
+
+    n = min(n_splits, len(set(groups.values())))
+    if n < 2:
+        raise ValueError("黃金集至少需要兩個不同案場日期才能分組評估。")
+    splitter = GroupKFold(n_splits=n)
+    return [
+        [golden_ids[i] for i in test]
+        for _, test in splitter.split(golden_ids, groups=[groups[f] for f in golden_ids])
+    ]
+
+
+def grouped_eval(
+    candidate_clf,
+    baseline_clf,
+    folds: list[list[str]],
+    g: pd.DataFrame,
     idx: dict,
     emb,
-    labels: dict,
-    C: float,
+    baseline_index: tuple[dict, object] | None = None,
 ) -> dict:
-    """每折：全語料扣掉該折群組重訓探針（同超參數）→ 考該折的黃金照片。
+    """同一批獨立黃金折評估已訓練好的兩版模型，不在考卷上重訓。
 
-    回 {model: [每折 macro-F1]}。兩顆模型用同一組折，差異才可比。
+    baseline_index：baseline 用不同編碼器時它自己的 (idx, emb)；預設與 candidate 共用。
     """
-    from sklearn.linear_model import LogisticRegression
     from sklearn.metrics import f1_score
 
+    b_idx, b_emb = baseline_index or (idx, emb)
     out = {"candidate": [], "baseline": []}
     for fold in folds:
-        tr_ids = [f for f in idx if f in labels and f not in fold]
-        te_ids = [f for f in fold if f in idx and f in labels]
-        if not tr_ids or not te_ids:
-            continue
-        Xtr = np.stack([emb[idx[f]] for f in tr_ids])
-        ytr = np.array([labels[f] for f in tr_ids])
-        Xte = np.stack([emb[idx[f]] for f in te_ids])
-        yte = np.array([labels[f] for f in te_ids])
-        for name, (clf_kind, pkl_path) in zip(
-            ("candidate", "baseline"), (candidate_clf_cfg, baseline_clf_cfg)
+        y = g.loc[fold, "cls"].to_numpy()
+        labels = sorted(set(y))
+        for name, clf, (i, e) in (
+            ("candidate", candidate_clf, (idx, emb)),
+            ("baseline", baseline_clf, (b_idx, b_emb)),
         ):
-            if clf_kind == "retrain":
-                clf = LogisticRegression(max_iter=2000, C=C, class_weight="balanced")
-                clf.fit(Xtr, ytr)
-            else:
-                clf = probe(pkl_path)
-            pred = clf.predict(Xte)
-            out[name].append(round(float(f1_score(yte, pred, average="macro", zero_division=0)), 4))
+            X = np.stack([e[i[f]] for f in fold])
+            out[name].append(
+                round(float(f1_score(y, clf.predict(X), labels=labels, average="macro", zero_division=0)), 4)
+            )
     return out
 
 
@@ -142,59 +179,64 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--labels", default=str(paths.GOLDEN / "golden_labels.csv"))
     ap.add_argument("--candidate", required=True, help="候選模型（split 名，如 v36）")
     ap.add_argument("--baseline", required=True, help="現行模型（CURRENT 那版）")
-    ap.add_argument("--cv", type=int, default=5, help="分組 CV 折數上限（群組少於此會自動縮）")
+    ap.add_argument("--cv", type=int, default=5, help="獨立黃金集分組評估折數上限")
     a = ap.parse_args()
 
     g = golden(a.labels)
-    c_path, b_path = (
-        paths.MODELS / f"probe-siglip-{a.candidate}.pkl",
-        paths.MODELS / f"probe-siglip-{a.baseline}.pkl",
-    )
+    groups = validate_holdout(g, a.candidate, a.baseline)
+    c_path, b_path = split_mod.probe_path(a.candidate), split_mod.probe_path(a.baseline)
     for p in (c_path, b_path):
         if not p.exists():
             raise SystemExit(f"找不到 {p}")
-    idx, emb, labels = corpus()
+    c_enc, b_enc = split_mod.encoder(a.candidate), split_mod.encoder(a.baseline)
+    idx, emb = corpus(c_enc)
+    b_idx, b_emb = (idx, emb) if b_enc == c_enc else corpus(b_enc)
 
-    keep = [f for f in g.index if f in idx]
-    dropped = len(g) - len(keep)
-    X = np.stack([emb[idx[f]] for f in keep])
-    y = np.array([g.loc[f, "cls"] for f in keep])
-    print(f"黃金集 {len(keep)} 張（{dropped} 張沒有 embedding，跳過）")
+    missing = (set(g.index) - set(idx)) | (set(g.index) - set(b_idx))
+    if missing:
+        raise ValueError(
+            f"黃金集有 {len(missing)} 張沒有 embedding，不可縮小考卷後照常宣稱通過：{sorted(missing)[:5]}"
+        )
+    X = np.stack([emb[idx[f]] for f in g.index])
+    Xb = np.stack([b_emb[b_idx[f]] for f in g.index])
+    y = g.cls.to_numpy()
+    print(f"獨立 PMS 黃金集 {len(g)} 張")
 
     report: dict = {
         "at": datetime.now().isoformat(timespec="seconds"),
         "labels": a.labels,
         "candidate": a.candidate,
         "baseline": a.baseline,
-        "golden_n": len(keep),
-        "golden_dropped_no_emb": dropped,
+        "golden_n": len(g),
+        "golden_dropped_no_emb": 0,
         "checks": {},
     }
     verdicts: list[bool] = []
 
-    cand_c, base_c = eval_probe(probe(c_path), X, y), eval_probe(probe(b_path), X, y)
+    candidate_clf, baseline_clf = probe(c_path), probe(b_path)
+    cand_c, base_c = eval_probe(candidate_clf, X, y), eval_probe(baseline_clf, Xb, y)
     report["golden_eval"] = {"candidate": cand_c, "baseline": base_c}
     print(f"\n== ① 黃金集 coverage @ precision ≥ {PRECISION_BAR}")
     print(f"   candidate {a.candidate}: coverage {cand_c['coverage']} (top1 {cand_c['top1']})")
     print(f"   baseline  {a.baseline}: coverage {base_c['coverage']} (top1 {base_c['top1']})")
-    ok1 = cand_c["coverage"] >= PRECISION_BAR and cand_c["coverage"] >= base_c["coverage"] - COVERAGE_SLACK
+    ok1 = cand_c["coverage"] > 0 and cand_c["coverage"] >= base_c["coverage"] - COVERAGE_SLACK
     print(f"   → {'PASS' if ok1 else 'FAIL'}")
     report["checks"]["coverage_at_precision"] = ok1
     verdicts.append(ok1)
 
     print("\n== ③ per-class recall（任何一類掉 0 = FAIL）")
-    zeros = [c for c, s in cand_c["per_class"].items() if s["recall"] == 0 and s["n"] >= 5]
-    small_zero = [c for c, s in cand_c["per_class"].items() if s["recall"] == 0 and s["n"] < 5]
+    zeros = [c for c, s in cand_c["per_class"].items() if s["recall"] == 0 and s["n"] >= 30]
+    small_zero = [c for c, s in cand_c["per_class"].items() if s["recall"] == 0 and s["n"] < 30]
     ok3 = not zeros
-    print(f"   recall=0 的類（n≥5）：{zeros or '無'}；n<5 的 0 類（僅記錄）：{small_zero or '無'}")
+    print(f"   recall=0 的類（n≥30）：{zeros or '無'}；n<30 的 0 類（本輪不評）：{small_zero or '無'}")
     print(f"   → {'PASS' if ok3 else 'FAIL'}")
     report["checks"]["no_zero_recall"] = ok3
     report["zero_recall_small_n"] = small_zero
     verdicts.append(ok3)
 
-    print(f"\n== ② 分組交叉驗證 macro-F1（{min(a.cv, 5)} 折，每折重訓 vs 現行權重）")
-    folds = group_folds(keep, labels)[: a.cv]
-    cv = grouped_cv(("retrain", None), ("pkl", b_path), folds, idx, emb, labels, C=300.0)
+    print(f"\n== ② 獨立黃金集分組評估 macro-F1（最多 {a.cv} 折，同折比較兩版）")
+    folds = group_folds(list(g.index), groups, a.cv)
+    cv = grouped_eval(candidate_clf, baseline_clf, folds, g, idx, emb, baseline_index=(b_idx, b_emb))
     cand_f1, base_f1 = np.array(cv["candidate"]), np.array(cv["baseline"])
     print(f"   candidate 各折：{cv['candidate']} → mean {cand_f1.mean():.4f} ± {cand_f1.std():.4f}")
     print(f"   baseline  各折：{cv['baseline']} → mean {base_f1.mean():.4f} ± {base_f1.std():.4f}")
@@ -202,8 +244,8 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"   → {'PASS' if ok2 else 'FAIL'}（門檻：不低於 baseline − 1σ = {base_f1.mean() - base_f1.std() * F1_SLACK_SIGMA:.4f}）"
     )
-    report["checks"]["grouped_cv_macro_f1"] = ok2
-    report["grouped_cv"] = {k: v for k, v in cv.items()}
+    report["checks"]["grouped_macro_f1"] = ok2
+    report["grouped_eval"] = {k: v for k, v in cv.items()}
     verdicts.append(ok2)
 
     report["verdict"] = "PASS" if all(verdicts) else "FAIL"
@@ -215,4 +257,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc

@@ -12,9 +12,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import mimetypes
 import os
+import shutil
 import sys
 from datetime import UTC, datetime
 
@@ -24,10 +26,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 import api as api_module
 import paths
 from api import Pms
+from photo_quality import bytes_problem, file_problem
 
 PHOTO_KINDS = ("WORK_ITEM", "WORKFORCE")  # FREE_CONTENT 的 progressShot 無 title 語意，排除
-MIN_PHOTO_BYTES = 1024  # 比這小的一定是壞檔，不是照片
-
 MANIFEST_COLS = [
     "fileId",
     "source",
@@ -84,6 +85,35 @@ def _ext(name: str | None, mime: str | None) -> str:
     if name and "." in name:
         return "." + name.rsplit(".", 1)[-1].lower()
     return mimetypes.guess_extension(mime or "") or ".bin"
+
+
+def _store_valid_photo(file_id: str, ext: str, blob: bytes, old_paths: list) -> None:
+    """有效下載原子替換壞檔；舊位元組先留在 raw/quarantine 供追查。"""
+    dst = paths.PHOTOS / f"{file_id}{ext}"
+    tmp = dst.with_name(f".{dst.name}.download")
+    invalid = [p for p in old_paths if file_problem(p)]
+    quarantine = paths.RAW / "quarantine"
+    tmp.write_bytes(blob)
+    try:
+        if invalid:
+            quarantine.mkdir(parents=True, exist_ok=True)
+        for old in invalid:
+            digest = hashlib.sha256(old.read_bytes()).hexdigest()[:12]
+            archived = quarantine / f"{old.stem}-{digest}{old.suffix}"
+            if old == dst:
+                if not archived.exists():
+                    shutil.copy2(old, archived)
+        os.replace(tmp, dst)
+        for old in invalid:
+            if old != dst:
+                digest = hashlib.sha256(old.read_bytes()).hexdigest()[:12]
+                archived = quarantine / f"{old.stem}-{digest}{old.suffix}"
+                if archived.exists():
+                    old.unlink()
+                else:
+                    os.replace(old, archived)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def _chips(fe_meta: dict | None) -> tuple[str, str]:
@@ -356,7 +386,11 @@ def sync(full: bool = False, constr_id: str | None = None, limit: int | None = N
 
     # 下載尚未存在的照片。太小的檔是伺服器端壞檔（實測有 19 bytes 的），
     # 只看檔名存在的話它永遠算「已有」，一輩子不會補抓。
-    have = {p.stem for p in paths.PHOTOS.iterdir() if p.is_file() and p.stat().st_size >= MIN_PHOTO_BYTES}
+    local = {}
+    for photo in paths.PHOTOS.iterdir():
+        if photo.is_file() and not photo.name.startswith("."):
+            local.setdefault(photo.stem, []).append(photo)
+    have = {fid for fid, photos in local.items() if any(file_problem(p) is None for p in photos)}
     todo = [r for r in new_df.itertuples() if r.fileId not in have]
     ok = fail = 0
     for n, r in enumerate(todo, 1):
@@ -379,11 +413,16 @@ def sync(full: bool = False, constr_id: str | None = None, limit: int | None = N
             log(f"  下載失敗 {r.fileId}: {err or '取不到網址'}")
             fail += 1
             continue
-        if len(blob) < MIN_PHOTO_BYTES:  # 壞檔不落地，下次還會再試
-            log(f"  壞檔 {r.fileId}: {len(blob)} bytes")
+        if problem := bytes_problem(blob):  # 壞檔不落地，下次還會再試
+            log(f"  壞檔 {r.fileId}: {problem}")
             fail += 1
             continue
-        (paths.PHOTOS / f"{r.fileId}{_ext(r.fileName, r.mimeType)}").write_bytes(blob)
+        try:
+            _store_valid_photo(r.fileId, _ext(r.fileName, r.mimeType), blob, local.get(r.fileId, []))
+        except OSError as exc:
+            log(f"  儲存失敗 {r.fileId}: {exc}")
+            fail += 1
+            continue
         ok += 1
         if n % 50 == 0:
             log(f"  下載 {n}/{len(todo)}")

@@ -16,8 +16,11 @@ SPLIT_FLAGS := $(if $(LEGACY),--with-legacy,) \
                $(if $(MIN_TRAIN),--min-train $(MIN_TRAIN),) \
                $(if $(LEGACY_FILL),--legacy-fill $(LEGACY_FILL),)
 
-.PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases fr-demo fr-gdino cvat-export g1-sample yolo-dataset contract-priority
-.PHONY: pms-app pms-status pms-candidates pms-export pms-import pms-model pms-retrain pms-ai
+.PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases fr-demo fr-gdino cvat-export g1-sample yolo-dataset defect-probe contract-priority
+.PHONY: pms-app pms-status pms-candidates pms-export pms-import pms-model pms-retrain pms-ai pms-quality
+
+pms-quality: ## 盤點 PMS 原圖、前處理圖與訓練影響（唯讀原圖）
+	uv run src/pms_quality.py
 
 pms-ai: ## OpenAI 看圖與標題分類；ARGS='--limit 4'，只保存建議
 	uv run src/pms.py ai $(ARGS)
@@ -51,7 +54,8 @@ retrain: data model  ## 新照片進來之後的完整重跑
 data: ## 1~3：同步、遮蔽、抽 embedding（都是增量，只做新檔）
 	uv run src/sync.py
 	uv run src/prepare.py
-	$(TRAIN) src/features.py
+	$(TRAIN) src/features.py                 # features.DEFAULT_ENCODER（分類器用）
+	$(TRAIN) src/features.py --model siglip  # 相似照片索引與舊 siglip 模型仍用
 
 model: ## 4~7：重切、重訓、評估、重算熱區。改標籤或裁決之後跑這個就夠
 	$(TRAIN) src/features.py --crops
@@ -137,6 +141,9 @@ g1-sample: ## G1 黃金集抽樣：trade 400 分層＋defect 樣態保底 30（�
 
 yolo-dataset: ## defects.csv 的 CVAT 框 → YOLO 資料集＋imgsz 量測（--measure-gdino 只量測）
 	uv run src/yolo_dataset.py --out v1-defects
+
+defect-probe: ## 缺失改善弱標籤 embedding baseline → CVAT 標註優先序（reports/defect-probe/）
+	$(TRAIN) src/defect_probe.py $(ARGS)
 
 contract-priority: ## 合約收集優先序重排（97 項合約相依 REQUIRED）
 	uv run src/contract_priority.py

@@ -15,10 +15,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import os
 import sys
 
 from PIL import Image, ImageDraw, ImageFile
+
+from photo_quality import file_problem
 
 # 上傳端偶有截斷的檔（實測 1/525）。丟掉整張不划算，殘缺的下緣照樣能訓練。
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -31,7 +34,6 @@ CORNER_W, CORNER_H = 0.30, 0.12  # 日報膠囊：四角
 # 留 margin 吸收機型解析度差異。
 WATERMARK = (0.0, 0.60, 0.56, 1.0)  # (x0, y0, x1, y1) 比例
 LONG_EDGE = 512
-MIN_PHOTO_BYTES = 1024  # 與 sync 的下載門檻一致；更小的 raw 不是可用照片
 FILL = (127, 127, 127)
 CLEAN_FROM = "2026-08-14"  # 這天起日報照存乾淨 raw，畫面上不再有膠囊
 
@@ -45,7 +47,12 @@ def clean_ids() -> set[str]:
     if not paths.MANIFEST.exists():
         return set()
     with open(paths.MANIFEST, newline="", encoding="utf-8") as f:
-        return {r["fileId"] for r in csv.DictReader(f) if CLEAN_FROM <= r["reportDate"] <= r["syncedAt"][:10]}
+        return {r["fileId"] for r in csv.DictReader(f) if is_clean_report(r["reportDate"], r["syncedAt"])}
+
+
+def is_clean_report(report_date: str, synced_at: str) -> bool:
+    """新日報原圖無膠囊；未來日期的髒資料仍按舊圖遮蔽。"""
+    return CLEAN_FROM <= report_date <= synced_at[:10]
 
 
 def mask_corners(
@@ -84,13 +91,21 @@ SRC_DIRS = {
 }
 
 
-def process(src, dst, kind: str = "report", mask: bool = True) -> None:
-    im = Image.open(src).convert("RGB")
+def prepare_jpeg(src, kind: str = "report", mask: bool = True) -> bytes:
+    """批次前處理與即時推論共用的位元組結果。"""
+    with Image.open(src) as original:
+        im = original.convert("RGB")
     if max(im.size) > LONG_EDGE:
         im.thumbnail((LONG_EDGE, LONG_EDGE), Image.LANCZOS)
     if mask:
         MASKS[kind](im)
-    im.save(dst, "JPEG", quality=90)
+    out = io.BytesIO()
+    im.save(out, "JPEG", quality=90)
+    return out.getvalue()
+
+
+def process(src, dst, kind: str = "report", mask: bool = True) -> None:
+    dst.write_bytes(prepare_jpeg(src, kind, mask))
 
 
 def run(force: bool = False, kind: str = "report", log=print) -> dict:
@@ -105,9 +120,9 @@ def run(force: bool = False, kind: str = "report", log=print) -> dict:
         if dst.exists() and not force:
             skipped += 1
             continue
-        size = src.stat().st_size
-        if kind == "report" and size < MIN_PHOTO_BYTES:
-            log(f"  跳過壞檔 {src.name}: {size} bytes（原檔保留，等待同步補抓）")
+        problem = file_problem(src) if kind == "report" else None
+        if problem:
+            log(f"  跳過壞檔 {src.name}: {problem}（原檔保留，等待同步補抓）")
             invalid += 1
             continue
         try:

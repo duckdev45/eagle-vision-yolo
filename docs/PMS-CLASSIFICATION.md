@@ -123,6 +123,19 @@ uv run src/pms.py calibration
 
 ## PMS 訓練與驗證
 
+### 照片品質與人工考卷
+
+`make pms-quality` 逐張檢查 manifest 對應的原圖與前處理圖，產出
+`reports/pms-photo-quality.csv` 和 `reports/pms-photo-quality-summary.json`；若目前訓練母體有壞圖則回傳非零狀態。
+同步會重新下載缺檔、過小或無法解碼的照片，只有新下載內容確認可解碼後才替換本機壞檔，舊位元組留在
+`data/raw/quarantine/`。未出現在目前 API 日報清單的舊 dev 資料只列在品質報告，不會憑空補抓。
+
+G2 上線門檻只接受**至少 300 張、由人仲裁的 PMS WORK_ITEM 照片**，而且與候選版及現行版的
+訓練／測試資料在「案場 × 日期」層級完全分離。缺答案、少張數、混入 legacy、缺 embedding 或同日洩漏都會拒絕評估。
+現有 `data/golden/g1_manifest.csv` 的工種抽樣以 legacy 為主，不能直接拿來宣稱 PMS 模型通過 G2；
+需要另收獨立 PMS 考卷並完成人工雙標與仲裁。G2 在同一批獨立黃金折上比較兩版已訓練模型，
+不在考卷上重訓。現階段模型切換仍由人工明確操作，G2 未完成前不應以單次 split 分數作上線依據。
+
 ```bash
 # SPLIT 請取尚未使用的新名稱
 make pms-model SPLIT=pms-v40
