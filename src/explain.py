@@ -285,7 +285,9 @@ def probe_cam(im, clf, enc, grid: int = GRID, win: int = 2):
         c = im.copy()
         ImageDraw.Draw(c).rectangle(r, fill=FILL_GRAY)
         cells.append(c)
-    p = clf.predict_proba(embed(enc, [im, *cells]))
+    ims = [im, *cells]
+    # 分批 forward：so400m 一次 37 張會把記憶體吃滿，系統開始 swap 就整個停住
+    p = clf.predict_proba(np.concatenate([embed(enc, ims[i : i + 8]) for i in range(0, len(ims), 8)]))
     k = int(p[0].argmax())
     cam = np.clip(p[0, k] - p[1:, k], 0, None).reshape(grid, grid)
     top = int(np.argmax(cam))
@@ -342,21 +344,26 @@ def run_probe(
     files = sorted(paths.IMAGES.glob("*.jpg"))
     todo = [p for p in files if p.stem not in have]
     log(f"{len(files)} 張，需新算 {len(todo)}")
+
+    def save():
+        ids = sorted(have)
+        np.savez(
+            out,
+            fileIds=np.array(ids),
+            cams=np.stack([have[i][0] for i in ids]).astype(np.float32),
+            preds=np.array([have[i][1] for i in ids]),
+            confs=np.array([have[i][2] for i in ids], dtype=np.float32),
+            boxes=np.array([have[i][3] for i in ids], dtype=np.float32),
+        )
+
     for i, p in enumerate(todo, 1):
         cam, pred, conf, box = probe_cam(Image.open(p).convert("RGB"), clf, enc, grid)
         have[p.stem] = (cam, pred, conf, box)
         if i % 25 == 0:
+            save()  # 中途存檔：被砍掉重跑時只補沒算的
             log(f"  {i}/{len(todo)}")
 
-    ids = sorted(have)
-    np.savez(
-        out,
-        fileIds=np.array(ids),
-        cams=np.stack([have[i][0] for i in ids]).astype(np.float32),
-        preds=np.array([have[i][1] for i in ids]),
-        confs=np.array([have[i][2] for i in ids], dtype=np.float32),
-        boxes=np.array([have[i][3] for i in ids], dtype=np.float32),
-    )
+    save()
     log(f"寫入 {out}")
     return str(out)
 
