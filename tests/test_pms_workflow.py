@@ -229,8 +229,15 @@ def test_pipeline_uses_pms_split_and_records_catalog(pms_env, monkeypatch):
     monkeypatch.setattr(split_mod, "build", build)
     with pytest.raises(ValueError, match="特徵"):
         pms_workflow.build_split("pms-test")
-    np.savez(paths.FEATURES / "siglip.npz", fileIds=np.array(["a", "b", "u1"]), emb=np.ones((3, 2)))
+    import features
+
+    np.savez(
+        paths.FEATURES / f"{features.DEFAULT_ENCODER}.npz",
+        fileIds=np.array(["a", "b", "u1"]),
+        emb=np.ones((3, 2)),
+    )
     result = pms_workflow.build_split("pms-test")
+    assert result["encoder"] == features.DEFAULT_ENCODER
     assert calls[-1]["legacy_fill"] == 0 and calls[-1]["with_legacy"] is False
     assert result["pmsCatalogVersion"] == review.catalog_version()
     assert not (paths.SPLITS / "CURRENT").exists()

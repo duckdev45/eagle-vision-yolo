@@ -13,7 +13,7 @@ from core import pms_review
 def check_new_run(name: str) -> None:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", name):
         raise ValueError("模型版本請使用英數字、連字號或底線，最多 64 字。")
-    if (paths.SPLITS / f"{name}.json").exists() or (paths.MODELS / f"probe-siglip-{name}.pkl").exists():
+    if (paths.SPLITS / f"{name}.json").exists() or any(paths.MODELS.glob(f"probe-*-{name}.pkl")):
         raise ValueError(f"{name} 已存在，請使用新的版本名稱。")
     if any(paths.REPORTS_OUT.glob(f"????-??-??-{name}")):
         raise ValueError(f"{name} 已有評估報告，請使用新的版本名稱。")
@@ -22,9 +22,11 @@ def check_new_run(name: str) -> None:
 def build_split(name: str, log=print) -> dict:
     import numpy as np
 
+    import features
     import split as split_mod
 
     sp = split_mod.build(name=name, with_legacy=False, legacy_fill=0, log=log)
+    encoder = sp.setdefault("encoder", features.DEFAULT_ENCODER)
     if not sp["train"] or not sp["test"]:
         raise ValueError("PMS 訓練或測試集為空，需要更多不同日期的有效照片。")
     if len({sp["labels"][fid] for fid in sp["train"]}) < 2:
@@ -33,7 +35,7 @@ def build_split(name: str, log=print) -> dict:
         raise ValueError("PMS 專用切分出現其他資料源。")
     available = set()
     for prefix in ("", "crops-"):
-        path = paths.FEATURES / f"{prefix}siglip.npz"
+        path = paths.FEATURES / f"{prefix}{encoder}.npz"
         if path.exists():
             with np.load(path, allow_pickle=True) as z:
                 available.update(z["fileIds"].tolist())
@@ -71,8 +73,15 @@ def training_steps(name: str, with_data: bool = False) -> list[tuple[str, Callab
     steps = [("同步 PMS 日報", sync_data)] if with_data else []
     steps += [
         ("PMS 照片前處理", prepare_data),
-        ("PMS 圖像特徵", lambda log: features.extract(src="report", log=log)),
-        ("人工證據裁切特徵", lambda log: features.extract_crops(log=log)),
+        # 分類器用 DEFAULT_ENCODER；siglip 仍補抽——相似照片索引（孤兒院）與舊版模型還在用它
+        *(
+            (
+                f"PMS 圖像特徵（{key}）",
+                lambda log, key=key: features.extract(model_key=key, src="report", log=log),
+            )
+            for key in dict.fromkeys((features.DEFAULT_ENCODER, features.LEGACY_ENCODER))
+        ),
+        ("人工證據裁切特徵", lambda log: features.extract_crops(model_key=features.DEFAULT_ENCODER, log=log)),
         (f"PMS 分組切分 {name}", lambda log: build_split(name, log)),
         ("工種分類器訓練", lambda log: train.probe(split_name=name, log=log)),
         ("工種分類評估", lambda log: evaluate.run(split_name=name, run_tag=name, log=log)),

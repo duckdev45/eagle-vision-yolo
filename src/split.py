@@ -52,6 +52,26 @@ def set_current(name: str) -> None:
     (paths.SPLITS / "CURRENT").write_text(name.strip())
 
 
+def encoder(name: str | None = None) -> str:
+    """這個 split 的模型用哪個編碼器——split 檔說了算（features.DEFAULT_ENCODER 只管新切的）。
+
+    v41 以前的 split 沒寫 `encoder` 欄，那時只有 siglip，所以缺欄＝LEGACY_ENCODER；
+    舊版模型因此不必重訓就能照常被操作台與推論找到。
+    """
+    import features
+
+    f = paths.SPLITS / f"{name or current()}.json"
+    if not f.exists():
+        return features.LEGACY_ENCODER
+    return json.loads(f.read_text()).get("encoder") or features.LEGACY_ENCODER
+
+
+def probe_path(name: str | None = None):
+    """`models/probe-{encoder}-{split}.pkl`——所有讀探針的地方都走這裡，別再自己拼。"""
+    name = name or current()
+    return paths.MODELS / f"probe-{encoder(name)}-{name}.pkl"
+
+
 def _write(payload: dict, log=print) -> dict:
     # 類別集合是 min_class_size 現算出來的，資料一長就會變。不寫進 split 的話，
     # 前後兩次評估的分母不同卻長得一樣，數字不可比。凍在這裡，evaluate 才有據可查。
@@ -197,6 +217,7 @@ def build(
     with_legacy: bool = False,
     min_train: int = DEFAULT_MIN_TRAIN,
     legacy_fill: int = DEFAULT_LEGACY_FILL,
+    encoder_key: str | None = None,
     log=print,
 ) -> dict:
     """A：日報，工地 × 日期。舊 pptx（`dataset == legacy`）只進 train。
@@ -309,9 +330,13 @@ def build(
         log(f"  人標框裁切 {len(crops)} 塊併入 train")
 
     n_legacy = int((df.dataset == "legacy").sum())
+    import features
+
     payload = {
         "name": name,
         "source": "report+legacy" if n_legacy else "report",
+        # 這份 split 的模型用哪個編碼器；train/evaluate/操作台/推論都從這裡讀（見 encoder()）
+        "encoder": encoder_key or features.DEFAULT_ENCODER,
         "testFrac": test_frac,
         "minTrain": min_train,
         "legacyFill": legacy_fill,
@@ -478,6 +503,7 @@ if __name__ == "__main__":
         help="切完還不足 N 張的類別，從 legacy 補到 N（只補缺的類，不是全開；0 = 關）",
     )
     ap.add_argument("--no-alias", action="store_true", help="C 的對照組：不折標籤")
+    ap.add_argument("--encoder", default=None, help="模型編碼器（預設 features.DEFAULT_ENCODER）")
     a = ap.parse_args()
     if a.qms:
         build_qms(a.name or "qms-v1", a.test_frac)
@@ -492,4 +518,5 @@ if __name__ == "__main__":
             with_legacy=a.with_legacy,
             min_train=a.min_train,
             legacy_fill=a.legacy_fill,
+            encoder_key=a.encoder,
         )

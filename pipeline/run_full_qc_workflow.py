@@ -74,7 +74,7 @@ def queue(split_name: str = "") -> Any:
     df = df.join(human_refs(df, labeler))
     import split as split_mod
 
-    sc, test_ids = scores("siglip", split_name or split_mod.current())
+    sc, test_ids = scores(None, split_name or split_mod.current())
     q = build(df, labeler, sc, test_ids)
     done = set(load_reviews())
     return q[~q.fileId.isin(done)].sort_values(["tier", "syncedAt"], ascending=False, kind="stable")

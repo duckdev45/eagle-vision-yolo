@@ -3,7 +3,7 @@
 凍結編碼器 → embedding → LogisticRegression。
 價值不在準確率，在診斷：分不開通常代表 labels.yaml 有矛盾，不是模型不夠大。
 
-    uv run --extra train src/train.py --probe [--split v1] [--model siglip]
+    uv run --extra train src/train.py --probe [--split v1] [--model so400m]
 """
 
 from __future__ import annotations
@@ -43,8 +43,10 @@ def dataset(split_name: str, model_key: str):
 DEFAULT_C = 300.0
 
 
-def probe(split_name: str = "v1", model_key: str = "siglip", C: float = DEFAULT_C, log=print):
+def probe(split_name: str = "v1", model_key: str | None = None, C: float = DEFAULT_C, log=print):
     from sklearn.linear_model import LogisticRegression
+
+    model_key = model_key or split_mod.encoder(split_name)
 
     (xtr, ytr, _), (xte, yte, ids_te) = dataset(split_name, model_key)
     log(f"train {xtr.shape} / test {xte.shape} / {len(set(ytr))} 類")
@@ -72,7 +74,7 @@ def _group_map() -> dict[str, str]:
 
 def tune_c(
     split_name: str = "v1",
-    model_key: str = "siglip",
+    model_key: str | None = None,
     cs: list[float] | None = None,
     folds: int = 5,
     log=print,
@@ -88,6 +90,7 @@ def tune_c(
     from sklearn.model_selection import GroupKFold
 
     cs = cs or [0.3, 1, 3, 10, 30, 100, 300, 1000, 3000]
+    model_key = model_key or split_mod.encoder(split_name)
     (xtr, ytr, ids_tr), _ = dataset(split_name, model_key)
     gmap = _group_map()
     groups = [gmap.get(f, "legacy") for f in ids_tr]
@@ -116,7 +119,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--probe", action="store_true", default=True)
     ap.add_argument("--split", default="v1")
-    ap.add_argument("--model", default="siglip")
+    ap.add_argument("--model", default=None, help="預設讀 split 檔的 encoder 欄")
     ap.add_argument("-C", type=float, default=DEFAULT_C)
     ap.add_argument("--tune-c", action="store_true", help="GroupKFold 掃 C，不訓練不存檔")
     a = ap.parse_args()

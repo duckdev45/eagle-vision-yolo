@@ -96,12 +96,13 @@ def code(truth: str, gem, sec: list[str], loc: str, fallback: str = "其他") ->
     return "D"
 
 
-def build(split_name: str = "v1", model_key: str = "siglip", log=print) -> pd.DataFrame:
+def build(split_name: str = "v1", model_key: str | None = None, log=print) -> pd.DataFrame:
     import numpy as np
 
     import features
 
     sp = split_mod.load(split_name)
+    model_key = model_key or split_mod.encoder(split_name)
     cls = sp["labels"]
     valid = set(sp.get("classes") or cls.values())
     labeler = Labeler.load()
@@ -207,7 +208,7 @@ def summarize(df: pd.DataFrame) -> str:
     return "\n".join(out) + "\n"
 
 
-def run(split_name: str = "v1", model_key: str = "siglip", log=print) -> str:
+def run(split_name: str = "v1", model_key: str | None = None, log=print) -> str:
     df = build(split_name, model_key, log)
     outdir = paths.REPORTS_OUT / f"{date.today():%Y-%m-%d}-label-audit"
     review = outdir / "manual_review"
@@ -234,6 +235,6 @@ def run(split_name: str = "v1", model_key: str = "siglip", log=print) -> str:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", default="v1")
-    ap.add_argument("--model", default="siglip")
+    ap.add_argument("--model", default=None, help="預設讀 split 檔的 encoder 欄")
     a = ap.parse_args()
     run(a.split, a.model)

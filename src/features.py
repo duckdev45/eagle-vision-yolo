@@ -3,7 +3,7 @@
 抽一次可重複使用：改標籤規則、改切分、換分類器都不必重抽。
 順帶產物——這批 embedding 可直接拿去做「檢索相似歷史照片塞進 prompt」。
 
-    uv run --extra train src/features.py [--model siglip]
+    uv run --extra train src/features.py [--model so400m]   # 預設 DEFAULT_ENCODER
 """
 
 from __future__ import annotations
@@ -26,6 +26,15 @@ MODELS = {
     "siglip384": ("ViT-B-16-SigLIP-384", "webli"),
     "so400m": ("ViT-SO400M-14-SigLIP-384", "webli"),
 }
+
+
+# 工種分類器用哪個編碼器——**全專案唯一的設定點**。新 split 會把當下的值寫進 split 檔
+# （`encoder` 欄），之後 train/evaluate/explain/操作台/推論都從 split 讀，不再各寫一份。
+# v41 以前的 split 沒有這欄 → 一律視為 LEGACY_ENCODER（舊 siglip 模型照常可用）。
+# 2026-09-27 換 so400m：同卷 v40 top1 0.852→0.885、CV +4.5pt（CI [+2.9,+6.3]）；
+# 代價是 CPU ~410ms/張（siglip ~30ms）、權重 ~1.7GB。
+DEFAULT_ENCODER = "so400m"
+LEGACY_ENCODER = "siglip"
 
 
 SRC = {"report": ("images", ""), "qms": ("qms_images", "qms-"), "legacy": ("legacy_images", "legacy-")}
@@ -153,6 +162,8 @@ def load(model_key: str = "siglip") -> tuple[list[str], np.ndarray]:
         f = paths.FEATURES / f"{prefix}{model_key}.npz"
         if f.exists():
             z = np.load(f, allow_pickle=True)
+            if not len(z["fileIds"]):  # 空的裁切檔寫死 768 維，會跟 so400m 的 1152 維接不起來
+                continue
             ids += z["fileIds"].tolist()
             embs.append(z["emb"])
     if not embs:
@@ -162,7 +173,7 @@ def load(model_key: str = "siglip") -> tuple[list[str], np.ndarray]:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="siglip", choices=list(MODELS))
+    ap.add_argument("--model", default=DEFAULT_ENCODER, choices=list(MODELS))
     ap.add_argument("--src", default="report", choices=["report", "qms", "legacy", "all"])
     ap.add_argument("--force", action="store_true", help="影像重做過就要加這個")
     ap.add_argument("--crops", action="store_true", help="改成抽人標框裡那塊的 embedding")

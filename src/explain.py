@@ -234,11 +234,14 @@ GRID = 6
 FILL_GRAY = (127, 127, 127)
 
 
-def encoder(model_key: str = "siglip"):
+def encoder(model_key: str | None = None):
     import open_clip
     import torch
 
     import features
+    import split as sm
+
+    model_key = model_key or sm.encoder()
 
     name, pretrained = features.MODELS[model_key]
     dev = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -291,11 +294,14 @@ def probe_cam(im, clf, enc, grid: int = GRID, win: int = 2):
     return ((cam / m if m > 0 else cam), clf.classes_[k], float(p[0, k]), (x0 / w, y0 / h, x1 / w, y1 / h))
 
 
-def cam_cache(split_name: str, model_key: str = "siglip"):
+def cam_cache(split_name: str, model_key: str | None = None):
+    import split as sm
+
+    model_key = model_key or sm.encoder(split_name)
     return paths.FEATURES / f"cam-{model_key}-{split_name}-g{GRID}.npz"
 
 
-def load_cams(split_name: str, model_key: str = "siglip") -> dict:
+def load_cams(split_name: str, model_key: str | None = None) -> dict:
     """{fileId: (cam grid×grid, pred, conf, box)}。沒跑過批次就回空的。"""
     f = cam_cache(split_name, model_key)
     if not f.exists():
@@ -308,7 +314,11 @@ def load_cams(split_name: str, model_key: str = "siglip") -> dict:
 
 
 def run_probe(
-    split_name: str | None = None, model_key: str = "siglip", grid: int = GRID, force: bool = False, log=print
+    split_name: str | None = None,
+    model_key: str | None = None,
+    grid: int = GRID,
+    force: bool = False,
+    log=print,
 ) -> str:
     """把所有日報照的熱區一次算完存起來，操作台就不必每張等編碼器。
 
@@ -322,6 +332,7 @@ def run_probe(
     import split as sm
 
     split_name = split_name or sm.current()
+    model_key = model_key or sm.encoder(split_name)
     with (paths.MODELS / f"probe-{model_key}-{split_name}.pkl").open("rb") as f:
         clf = pickle.load(f)["clf"]
     enc = encoder(model_key)

@@ -16,17 +16,22 @@ from .common import txt
 
 
 @st.cache_resource(show_spinner=False)
-def _encoder(model_key: str = "siglip"):
+def _encoder(model_key: str | None = None):
     import explain
 
     return explain.encoder(model_key)
 
 
 @st.cache_resource(show_spinner=False)
-def _probe(model_key: str = "siglip", split_name: str = ""):
+def _probe(model_key: str | None = None, split_name: str = ""):
     import pickle
 
-    with (paths.MODELS / f"probe-{model_key}-{split_name}.pkl").open("rb") as f:
+    path = (
+        paths.MODELS / f"probe-{model_key}-{split_name}.pkl"
+        if model_key
+        else split_mod.probe_path(split_name)
+    )
+    with path.open("rb") as f:
         return pickle.load(f)["clf"]
 
 
@@ -47,9 +52,7 @@ def _evidence(file_id: str, grid: int):
 
     im = Image.open(paths.IMAGES / f"{file_id}.jpg").convert("RGB")
     hit = _cams(split_mod.current()).get(file_id) if grid == explain.GRID else None
-    cam, pred, conf, box = hit or explain.probe_cam(
-        im, _probe("siglip", split_mod.current()), _encoder(), grid
-    )
+    cam, pred, conf, box = hit or explain.probe_cam(im, _probe(None, split_mod.current()), _encoder(), grid)
     return explain.overlay(im, cam, box, pred), pred, conf, explain.to_1000(box)
 
 
@@ -58,8 +61,8 @@ def evidence_view(d2) -> None:
     st.divider()
     st.subheader("判斷依據")
     cur = split_mod.current()
-    if not (paths.MODELS / f"probe-siglip-{cur}.pkl").exists():
-        st.info(f"沒有 probe-siglip-{cur}.pkl，先跑 train.py。")
+    if not split_mod.probe_path(cur).exists():
+        st.info(f"沒有 {split_mod.probe_path(cur).name}，先跑 train.py。")
         return
     opts = d2.fileId.tolist()
     if not opts:

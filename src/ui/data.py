@@ -41,7 +41,7 @@ def labeled() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def local_preds(model_key: str = "siglip", split_name: str = "") -> tuple[dict, set]:
+def local_preds(model_key: str | None = None, split_name: str = "") -> tuple[dict, set]:
     """{fileId: 本地模型預測}, {測試集 fileId}。缺模型或特徵就回空的。
 
     訓練集照片的預測是它自己背過的，偏樂觀，所以要標出來。
@@ -50,6 +50,9 @@ def local_preds(model_key: str = "siglip", split_name: str = "") -> tuple[dict, 
 
     import numpy as np
 
+    import split as split_mod
+
+    model_key = model_key or split_mod.encoder(split_name or None)
     try:
         z = np.load(paths.FEATURES / f"{model_key}.npz", allow_pickle=True)
         with (paths.MODELS / f"probe-{model_key}-{split_name}.pkl").open("rb") as f:

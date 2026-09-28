@@ -42,7 +42,7 @@ def _labeled() -> tuple[pd.DataFrame, Labeler]:
 
 def queue(split_name: str = "", since: str = "") -> pd.DataFrame:
     df, lab = _labeled()
-    sc, test_ids = scores("siglip", split_name or split_mod.current())
+    sc, test_ids = scores(None, split_name or split_mod.current())
     q = build(df, lab, sc, test_ids)
     done = set(load_reviews())
     q = q[~q.fileId.isin(done)]

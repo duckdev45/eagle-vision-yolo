@@ -122,9 +122,38 @@ def coverage_curve(proba, y_true, classes) -> list[dict]:
     return out
 
 
+def work_item_metrics(test_ids, proba, y_true, classes) -> dict:
+    """同一張考卷改用工項融合（core.evaluation_metrics.fuse_work_items）再算一次。
+
+    單張分數仍是主指標（journal 與跨版比較都看它）；這一欄回答「推論時若參考同工項
+    另一張照片，能多對幾張」。v40 實測 +5pt，打底/粉光這類單張難分的受益最多。
+    """
+    from sklearn.metrics import f1_score
+
+    from core.evaluation_metrics import fuse_work_items
+
+    man = pd.read_csv(paths.MANIFEST, dtype=str, usecols=["fileId", "dailyReportInfoId", "title"])
+    man = man.fillna("").set_index("fileId")
+    keys = [
+        f"{man.at[f, 'dailyReportInfoId']}|{man.at[f, 'title']}"
+        if f in man.index and man.at[f, "dailyReportInfoId"]
+        else ""
+        for f in test_ids
+    ]
+    fused = fuse_work_items(proba, keys)
+    pred = np.asarray(classes)[fused.argmax(1)]
+    # macro 只平均考卷上真的有的類別，與主指標同一條規則（見 run() 的 ghosts 註解）
+    macro = f1_score(y_true, pred, labels=sorted(set(y_true)), average="macro", zero_division=0)
+    return {
+        "top1": round(float((pred == y_true).mean()), 4),
+        "macroF1": round(float(macro), 4),
+        "coverageCurve": coverage_curve(fused, y_true, classes),
+    }
+
+
 def run(
     split_name: str = "v1",
-    model_key: str = "siglip",
+    model_key: str | None = None,
     baseline: bool = True,
     run_tag: str = "probe",
     errors: int = 24,
@@ -135,6 +164,7 @@ def run(
     import features
 
     sp = split_mod.load(split_name)
+    model_key = model_key or split_mod.encoder(split_name)
     cls = sp["labels"]
     ids, emb = features.load(model_key)
     idx = {f: i for i, f in enumerate(ids)}
@@ -170,7 +200,13 @@ def run(
         metrics["zeroSupportClasses"] = ghosts
         log(f"  ⚠ 測試集 0 張但模型猜得出來的類別：{ghosts}（未計入 macroF1）")
     if hasattr(clf, "predict_proba"):
-        metrics["coverageCurve"] = coverage_curve(clf.predict_proba(x), y, clf.classes_)
+        proba = clf.predict_proba(x)
+        metrics["coverageCurve"] = coverage_curve(proba, y, clf.classes_)
+        metrics["workItemFusion"] = work_item_metrics(test_ids, proba, y, clf.classes_)
+        log(
+            f"  工項融合（同日報×同標題兄弟照）：top1={metrics['workItemFusion']['top1']}"
+            f" macroF1={metrics['workItemFusion']['macroF1']}（單張 top1={metrics['top1']}）"
+        )
 
     if baseline:
         # Gemini 只存在於日報那批；測試集若含 QMS 照片，這裡自動只取得到的部分
@@ -230,7 +266,7 @@ def run(
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", default="v1")
-    ap.add_argument("--model", default="siglip")
+    ap.add_argument("--model", default=None, help="預設讀 split 檔的 encoder 欄")
     ap.add_argument("--baseline", action="store_true", default=True)
     ap.add_argument("--run", default="probe")
     a = ap.parse_args()

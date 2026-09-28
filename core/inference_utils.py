@@ -30,8 +30,16 @@ import numpy as np  # noqa: E402
 import paths  # noqa: E402
 
 
-def load_model_classifier(model_key: str = "siglip", split_name: str = "") -> Optional[Any]:
+def _encoder(model_key: Optional[str], split_name: str) -> str:
+    """沒指定就讀 split 檔的 encoder 欄（舊 split 缺欄＝siglip）。"""
+    import split as split_mod
+
+    return model_key or split_mod.encoder(split_name or None)
+
+
+def load_model_classifier(model_key: Optional[str] = None, split_name: str = "") -> Optional[Any]:
     """載入線性探針（sklearn clf）。檔案不存在回 None——呼叫端要自己擋。"""
+    model_key = _encoder(model_key, split_name)
     p = paths.MODELS / f"probe-{model_key}-{split_name}.pkl"
     if not p.exists():
         return None
@@ -50,11 +58,12 @@ def calculate_embeddings(file_ids: list[str], model_key: str = "siglip") -> np.n
     return z["emb"][rows] if rows else np.zeros((0, 0))
 
 
-def scores(model_key: str = "siglip", split_name: str = "") -> tuple[dict, set]:
+def scores(model_key: Optional[str] = None, split_name: str = "") -> tuple[dict, set]:
     """{fileId: (預測, 信心, 邊際)}, {測試集 fileId}——與 review 佇列同一套算法。
 
     用邊際不用信心：信心 0.9 但第二名 0.85 = 在兩類間猶豫；0.5 vs 0.05 = 篤定。
     """
+    model_key = _encoder(model_key, split_name)
     try:
         clf = load_model_classifier(model_key, split_name)
         if clf is None:
@@ -75,7 +84,7 @@ def scores(model_key: str = "siglip", split_name: str = "") -> tuple[dict, set]:
 
 
 def get_heatmaps(
-    file_id: str, model_key: str = "siglip", split_name: str = ""
+    file_id: str, model_key: Optional[str] = None, split_name: str = ""
 ) -> tuple[Optional[np.ndarray], Optional[Any], Optional[float], Optional[str]]:
     """遮擋法熱區（explanation）。
 
@@ -97,5 +106,5 @@ if __name__ == "__main__":
     import split as split_mod
 
     cur = split_mod.current() if paths.SPLITS.exists() else "v1"
-    sc, test = scores("siglip", cur)
+    sc, test = scores(None, cur)
     print(f"split={cur} · embeddings scored: {len(sc)} · test ids: {len(test)}")

@@ -50,7 +50,7 @@ def review_queue() -> None:
     # 規則抄兩份的話，畫面上看到的佇列跟命令列印的會慢慢對不起來。
     import review as review_mod
 
-    scores, test_ids = review_mod.scores("siglip", cur)
+    scores, test_ids = review_mod.scores(None, cur)
     q = review_mod.build(df, lab, scores, test_ids)
     names = review_mod.TIER_NAMES
     tier_n = q.tier.value_counts().to_dict()  # 先存，下面的篩選會改 q

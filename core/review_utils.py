@@ -39,7 +39,7 @@ TIER_NAMES = {
 }
 
 
-def scores(model_key: str = "siglip", split_name: str = "") -> tuple[dict, set]:
+def scores(model_key: str | None = None, split_name: str = "") -> tuple[dict, set]:
     """{fileId: (預測, 信心, 邊際)}, {測試集 fileId}。缺模型或特徵就回空的。
 
     用邊際不用信心：信心 0.9 但第二名 0.85 的照片，模型其實在兩類之間猶豫；
@@ -47,6 +47,9 @@ def scores(model_key: str = "siglip", split_name: str = "") -> tuple[dict, set]:
     """
     import numpy as np
 
+    import split as split_mod
+
+    model_key = model_key or split_mod.encoder(split_name or None)
     try:
         z = np.load(paths.FEATURES / f"{model_key}.npz", allow_pickle=True)
         with (paths.MODELS / f"probe-{model_key}-{split_name}.pkl").open("rb") as f:

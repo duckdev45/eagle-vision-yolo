@@ -122,7 +122,7 @@ def orphan_queue() -> None:
     done = load_reviews()
     labels = _split_labels(split_mod.current())
     idx = _emb_index(_emb_mtime())
-    scores, _ = review_mod.scores("siglip", split_mod.current())
+    scores, _ = review_mod.scores(None, split_mod.current())
 
     with st.expander(f"候選詞挖礦（{len(orph)} 張孤兒的標題 × newclass 同款演算法）", expanded=False):
         got = _candidate_terms(orph, legacy)
