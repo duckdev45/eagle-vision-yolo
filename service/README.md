@@ -64,18 +64,19 @@ docker run --rm -p 127.0.0.1:8000:8000 \
 
 正式部署不要發佈 host port；讓 PMS NestJS 與此 container 位於同一私有網路，或由 NestJS 經私有 HTTPS 呼叫另一台主機。NestJS 傳原圖 bytes 與服務間 token，瀏覽器不直連模型 API。Linux container 沒有 macOS MPS，正式主機要另測 CPU／CUDA 延遲與記憶體。
 
-### 資源與延遲（v43 so400m，2026-09-28 實測）
+### 資源與延遲（v43 so400m，2026-09-29 實測）
 
-本機 Apple Silicon 上的 OrbStack Linux container（linux/arm64、12 vCPU、CPU 推論，無 CUDA／MPS）：
+本機 Apple Silicon 上的 OrbStack Linux container（linux/arm64、12 vCPU、CPU 推論，無 CUDA／MPS，機器閒置時量）。
+linux 的 torch／torchvision 由 `pyproject.toml` 指到 PyTorch CPU index，不裝 CUDA 相依：
 
 | 項目 | 數值 |
 |---|---|
-| image 大小 | 12.9 GB（`uv sync` 在 linux 會裝 torch 的 CUDA 相依約 11 GB；模型包 1.7 GB） |
-| 記憶體峰值（cgroup `memory.peak`，含載入權重時的檔案快取） | 7.1 GB；穩定後約 4.5 GB |
-| `/v1/predict` 單張 | 中位數 2.1 s（p90 2.2 s，n=10） |
-| `/v1/predict-batch` 同工項 2 張 | 中位數 3.9 s（n=5） |
+| image 大小 | 3.44 GB（模型包 1.6 GB；改 CPU wheel 前為 12.9 GB） |
+| 記憶體峰值（cgroup `memory.peak`，含載入權重時的檔案快取） | 6.2 GB；推論後穩定約 2.3 GB |
+| `/v1/predict` 單張 | 中位數 1.18 s（p90 1.24 s，n=10） |
+| `/v1/predict-batch` 同工項 2 張 | 中位數 2.45 s（n=5） |
 
-同一台 Mac 直接跑（非 container）so400m 為 CPU 約 0.4–0.65 s／張、MPS 0.16 s／張，container 內明顯較慢。
+同一台 Mac 直接跑（非 container）so400m 為 CPU 約 0.4–0.65 s／張、MPS 0.16 s／張，container 內較慢。
 **x86 正式主機的延遲與記憶體需在正式主機實測**，量測方式（repo 根目錄，模型包已匯出）：
 
 ```bash
@@ -87,7 +88,7 @@ docker exec ev-bench cat /sys/fs/cgroup/memory.peak
 ```
 
 （`service/bench.py` 只用標準庫：對 `/v1/predict` 送 N 次、對 `/v1/predict-batch` 送 N/2 次，印中位數與 p90。）
-容器記憶體上限建議至少 8 GB。只需 CPU 推論時，可改用 CPU 版 torch wheel 縮小 image（未實作）。
+容器記憶體上限建議至少 8 GB（載入權重的峰值 6.2 GB）。需要 GPU 時要拿掉 `pyproject.toml` 的 CPU index 設定並重新 `uv lock`。
 
 ## 驗證與發布
 
