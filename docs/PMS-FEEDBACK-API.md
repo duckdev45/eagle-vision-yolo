@@ -99,8 +99,7 @@ v39 的單次測試為 top-1 0.7463、macro-F1 0.6888；v40 為 0.8521、0.8277�
 
 本機已具備 `src/pms_inference.py` 的 v40 唯讀推論，以及 `src/pms_shadow_api.py` 的 loopback HTTP
 影子入口。它只接受已同步 manifest 的有效 `WORK_ITEM` `fileId`，從 PMS 原圖重做相同遮蔽、JPEG 編碼、
-SigLIP 特徵與探針推論，不寫入正式工種或人工答案。現有 `src/predict.py` 的 ONNX 路徑服務的是另一種
-finetune 模型，不能拿來代替 v40。對一張已知照片，原圖即時前處理與批次前處理位元組完全相同，
+SigLIP 特徵與探針推論，不寫入正式工種或人工答案。舊的 `src/predict.py` ONNX 路徑（finetune 模型，2026-10-09 移除）不能拿來代替 v40。對一張已知照片，原圖即時前處理與批次前處理位元組完全相同，
 即時與快取 embedding 最大差 `1.2e-7`，預測類別及六位小數分數一致。
 
 ```bash

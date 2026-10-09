@@ -1,17 +1,16 @@
-"""切分。三種資料組態，共用同一個 JSON 格式。
+"""切分：PMS 日報照片 → train/test（JSON）。
 
     {name, train:[fileId], test:[fileId], labels:{fileId: cls}, ...}
 
-labels 直接寫進 split，train/evaluate 就不必知道這批資料來自日報還是 QMS，
-三個實驗（A 日報 / B QMS / C 混合）走同一條程式碼路徑。
+labels 直接寫進 split，train/evaluate 不必再讀標籤規則。
 
-切分鐵律都是同一條：**畫面幾乎相同的照片不可跨組**。
-- 日報：同工地同一天 → 按 constrId × reportDate 切（SPEC §8.3）
-- QMS：同一格是同位置同時間拍的 2~3 張 → 按 constructionInsId 整格切
+切分鐵律：**畫面幾乎相同的照片不可跨組**——同工地同一天按 constrId × reportDate 整天切（SPEC §8.3）。
+訓練鏈的唯一入口是 pipeline/pms_workflow.py（`make pms-model`／每日排程）；這支 CLI 只切不訓。
 
-    uv run src/split.py                     # A：日報 v1
-    uv run src/split.py --qms               # B：QMS 自己的 train/test
-    uv run src/split.py --merged            # C：日報 train + QMS → 測日報 test
+    uv run src/split.py --name v46
+
+2026-10-09：QMS 自訓／混合實驗（B/C）與舊 pptx（legacy）進訓練的選項已移除——主線自 v40 起只收 PMS，
+那兩條路的資料原地保留（見 data/archive/README.md），程式在 git 歷史。
 """
 
 from __future__ import annotations
@@ -26,7 +25,6 @@ from datetime import date
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(__file__))
 import paths
-from core.labeler import Labeler
 from labels import labeled_manifest
 
 # 操作台與解釋工具要看哪一組。存成檔案而不是原始碼常數，操作台的按鈕才改得動
@@ -34,10 +32,8 @@ from labels import labeled_manifest
 # （實測踩過：畫面上一直顯示 v1 的 0.712，實際模型已經 0.847）。
 FALLBACK = "v8"
 
-# 稀有類別保底的預設值。放這裡而不是各呼叫端各寫一份——操作台的「重跑模型」按鈕
-# 與 `make model` 必須切出同一份 split，否則畫面上的分數跟命令列跑的對不起來。
+# 稀有類別保底的預設值。放這裡而不是各呼叫端各寫一份——CLI 與 pms_workflow 必須切出同一份 split。
 DEFAULT_MIN_TRAIN = 12  # train 少於這個數 → 把含它的測試日整天搬回 train
-DEFAULT_LEGACY_FILL = 40  # 切完還不足 → 只從 legacy 補那幾類到這個數
 
 
 def current() -> str:
@@ -118,16 +114,13 @@ def rare_class_floor(
     護欄比保底重要。第一版沒有 max_shrink，實測 min_train=20 把測試集從 132 砍到 70
     ——搬 4 整天 62 張，只換到金屬-欄杆鐵件 8 張，而且還是沒到 20。
     測試集是唯一的量尺，為了餵飽一個類把量尺鋸掉一半，代價遠大於收益。
-    救不動就認了：16 張的類別是資料不夠，切分變不出照片來（那是 legacy_topup 的事）。
+    救不動就認了：16 張的類別是資料不夠，切分變不出照片來。
     """
     moved: list[dict] = []
     days = {k: list(v) for k, v in test_days.items()}
     quota = int(int(is_test.sum()) * max_shrink)  # 測試集最多賠掉這麼多張
     stuck: set[str] = set()  # 救不動的，別在迴圈裡打轉
 
-    # 只數 PMS：這一步治的是「按天切分把 PMS 稀有類別整批抽進測試側」。
-    # legacy 那幾千張永遠在 train，把它們算進來會讓每個類別都看起來吃飽，保底變空轉
-    # （實測 --min-train 12 --legacy-fill 40 一天都沒搬）。
     pms_only = df.dataset == "pms" if "dataset" in df else df.cls.notna()
 
     while quota > 0:
@@ -176,66 +169,14 @@ def rare_class_floor(
     return is_test, days, moved
 
 
-def legacy_topup(df, is_test, floor: int, log=print):
-    """只用 legacy 補**PMS 訓練張數不足**的類別，其餘 legacy 全丟。
-
-    全開 legacy 實測有害（README：同一份 124 張測試集 0.823 → 0.782）——5599 張
-    legacy 淹掉 641 張 PMS，訓練分佈整個歪成另一個管道（有人挑過、重壓縮過）。
-
-    但「分佈歪掉」是給有東西學的類別的煩惱。PMS 只有 16 張的金屬-欄杆鐵件，
-    問題不是學歪，是根本沒得學。所以按類別補到門檻就停，不是全開或全關。
-
-    **只補 PMS 已經有的類別**。legacy 那 9 個 PMS 沒有的類（模板、廚具、石材…）
-    不在這裡開——解鎖新類別是 `--with-legacy` 的事，是產品決定。
-    第一版沒擋，`--legacy-fill 40` 順手把類別數從 11 開成 21，其中 9 類測試集
-    一張都沒有，等於偷偷換了一個沒人要求的模型。
-    """
-    pms_train = df[(df.dataset == "pms") & ~is_test].cls.value_counts().to_dict()
-    keep, note = [], []
-    for cls_, g in df[df.dataset == "legacy"].groupby("cls"):
-        if cls_ not in pms_train:  # PMS 沒有的類別不在這裡開
-            continue
-        need = floor - pms_train.get(cls_, 0)
-        if need <= 0:
-            continue
-        # 固定取排序後的前 n 張——同樣的資料要切出同樣的 split，不能靠亂數
-        take = sorted(g.fileId)[:need]
-        keep += take
-        note.append(f"{cls_} {pms_train.get(cls_, 0)}+{len(take)}")
-    if note:
-        log(f"  legacy 補訓練（門檻 {floor}）：{'、'.join(note)}")
-    drop = (df.dataset == "legacy") & ~df.fileId.isin(keep)
-    n = int(drop.sum())
-    if n:
-        log(f"  其餘 legacy {n} 張丟掉——沒缺的類別不補，補了會把訓練分佈拉去別的管道")
-    return df[~drop], is_test[~drop]
-
-
 def build(
     name: str = "v1",
     test_frac: float = 0.2,
-    with_legacy: bool = False,
     min_train: int = DEFAULT_MIN_TRAIN,
-    legacy_fill: int = DEFAULT_LEGACY_FILL,
     encoder_key: str | None = None,
     log=print,
 ) -> dict:
-    """A：日報，工地 × 日期。舊 pptx（`dataset == legacy`）只進 train。
-
-    為什麼舊資料不進 test：測試集要代表**產品實際會收到的照片**，那是 PMS 上傳的。
-    舊 pptx 是同分佈但不同管道（有人挑過、貼進投影片、重壓縮過），
-    放進 test 等於把考卷換成另一份，跨次實驗就再也比不了。
-
-    為什麼 with_legacy 預設是關的：實測它**沒有提升**現有類別的準確率
-    （同一份 124 張測試集、限縮到測試集有的 12 類：0.823 → 0.782）。
-    它的價值不在分數，在於解鎖 PMS 張數不夠的 9 個類別（模板、鋼筋、石材、廚具…）。
-    要那些類別就開，要現有 10 類的最高分就別開——這是產品決定，不是預設值該替人做的。
-
-    `min_train` / `legacy_fill` 是稀有類別的兩道保底，預設都關（給 0 就是舊行為）：
-    前者調切分（把含稀有類別的測試日整天搬回 train），後者調資料
-    （只對缺的類別從 legacy 補到門檻）。先切分後補——切分是免費的，補 legacy
-    要付分佈歪掉的代價，能不補就不補。
-    """
+    """PMS 日報，工地 × 日期整天切。`min_train`：稀有類別把含它的測試日整天搬回 train（0＝關）。"""
     from labels import orphan_reviews, pending_classes, unclaimed
 
     orphan = orphan_reviews()
@@ -263,58 +204,19 @@ def build(
             f"  排隊中 {len(pend)} 類（規則認得、張數不足 min_class_size，過門檻自動上線）：{near}"
             + ("…" if len(pend) > 4 else "")
         )
-    # legacy_fill 要有 legacy 列可挑，先全部載進來，補完再把沒用到的丟掉
-    df = labeled_manifest(with_legacy=with_legacy or bool(legacy_fill))
+    df = labeled_manifest()
     if "dataset" not in df:
         df = df.assign(dataset="pms")
-    if legacy_fill and not with_legacy:
-        # min_class_size 是**合併後**才算的（labels.py 的設計），所以光是載進 legacy
-        # 就會讓幾個 PMS 張數不足的類別復活，考卷跟著變（實測 test 132 → 136）。
-        # legacy_fill 只該加訓練資料，不該改考卷——把類別集合鎖回 PMS 自己算的那組。
-        #
-        # **鎖的集合不能用 labeled_manifest(with_legacy=False)**（v15 修）：
-        # 那已經跑過 min_class_size drop，PMS 只有零星幾張的類別整類被砍 →
-        # 集合裡沒有它 → 下一行把合併後復活的它視為「不在 PMS 類別集合」濾掉，
-        # legacy 補訓練的機會也一起被沒收。實測：防水-嵌縫 PMS 2 張、legacy 46 張，
-        # v38/v39 split 裡整類消失。
-        #
-        # 正確的鎖集合 = **PMS 規則認得的類別**，與張數門檻完全無關。
-        # 張數門檻（min_class_size / small_class: drop）是對**合併後的訓練集**算的，
-        # 在這裡對 PMS 單獨算一次等於用錯分母提前砍人。fallback 不收是規則定的
-        # （drop_fallback: true），不是張數問題，仍然排除。
-        # 從 df 自己算（不重讀 manifest）。這裡 df 已含 legacy，但鎖集合看的是
-        # **規則認得哪些類別**——與張數無關，所以直接取 df.cls 的集合扣掉 fallback；
-        # legacy 帶進來而 PMS 沒有的類，下一行的 log 會唸出來再被濾掉。
-        # 用 df.cls 而不是重讀 manifest：測試 monkeypatch labeled_manifest 時
-        # 才不會繞過它去讀真資料。
-        _lab = Labeler.load()
-        keep = {c for c in df.cls.dropna().unique() if c != _lab.fallback}
-        if extra := sorted(set(df.cls) - keep):
-            log(f"  載入 legacy 讓 {len(extra)} 個類別復活，鎖回 PMS 的類別集合：{extra}")
-        df = df[df.cls.isin(keep)]
-    pms = df[df.dataset == "pms"]
-    test_days = split_dates(pms, test_frac)  # 測試日只從 PMS 這邊挑
+    test_days = split_dates(df, test_frac)
 
     def in_test_day(r) -> bool:
         return r.reportDate in test_days.get(str(r.constrId), [])
 
-    is_test = df.apply(lambda r: r.dataset == "pms" and in_test_day(r), axis=1)
+    is_test = df.apply(in_test_day, axis=1).astype(bool)
 
     moved: list[dict] = []
     if min_train:
         is_test, test_days, moved = rare_class_floor(df, is_test, test_days, min_train, log=log)
-
-    # 舊資料若落在 PMS 的測試日、同一個工地，就是同一天同一面牆的另一張照片 → 丟掉。
-    # 不丟的話它進了 train，畫面幾乎相同的那張在 test，這正是鐵律三禁止的事。
-    # 必須在保底搬完之後才算——測試日搬回 train 了，撞上的就不算撞。
-    leak = df.apply(lambda r: r.dataset == "legacy" and in_test_day(r), axis=1)
-    if leak.any():
-        log(f"  舊資料撞到 PMS 測試日，丟掉 {int(leak.sum())} 張")
-    df = df[~leak]
-    is_test = is_test[~leak]
-
-    if legacy_fill and not with_legacy:
-        df, is_test = legacy_topup(df, is_test, legacy_fill, log)
 
     # 人標框裁出來的那些塊：同一個標籤、**只進 train**（測試集沒有人畫的框）。
     # 母張若落在測試日，它的裁切塊也不能進 train——那等於把答案偷渡到訓練側。
@@ -329,17 +231,15 @@ def build(
     if crops:
         log(f"  人標框裁切 {len(crops)} 塊併入 train")
 
-    n_legacy = int((df.dataset == "legacy").sum())
     import features
 
     payload = {
         "name": name,
-        "source": "report+legacy" if n_legacy else "report",
+        "source": "report",
         # 這份 split 的模型用哪個編碼器；train/evaluate/操作台/推論都從這裡讀（見 encoder()）
         "encoder": encoder_key or features.DEFAULT_ENCODER,
         "testFrac": test_frac,
         "minTrain": min_train,
-        "legacyFill": legacy_fill,
         # 搬過哪幾天要留證據：測試集比 testFrac 算出來的小，看到這個才知道為什麼
         "floorMovedDays": moved,
         "testDaysByConstr": test_days,
@@ -347,7 +247,6 @@ def build(
         "test": sorted(df[is_test].fileId.tolist()),
         "labels": {**dict(zip(df.fileId, df.cls)), **crops},
         "datasets": {**dict(zip(df.fileId, df.dataset)), **{k: "crop" for k in crops}},
-        "trainLegacy": n_legacy,
         "trainCrops": len(crops),
         "trainClassCounts": df[~is_test].cls.value_counts().to_dict(),
         "testClassCounts": df[is_test].cls.value_counts().to_dict(),
@@ -367,156 +266,20 @@ def build(
     return out
 
 
-def split_cells(df, test_frac: float = 0.2, seed: int = 0) -> set[str]:
-    """QMS：每個中類抽 test_frac 的**格子**（不是照片）進測試集。
-
-    同一格是同位置同時間拍的，拆開就等於把近乎同一張分到兩邊，數字會漂亮到假。
-    """
-    test = set()
-    for _, g in df.groupby("cls"):
-        cells = sorted(g.constructionInsId.unique())
-        k = min(max(1, math.ceil(len(cells) * test_frac)), max(len(cells) - 1, 0))
-        # 用 hash 而非 random，換機器結果一樣
-        test |= set(sorted(cells, key=lambda c: hash((seed, c)))[:k])
-    return test
-
-
-def build_qms(
-    name: str = "qms-v1", test_frac: float = 0.2, val_frac: float = 0.1, min_class_size: int = 30, log=print
-) -> dict:
-    """B：QMS 自己的 train/val/test（中類標籤，按格切）。
-
-    有 val 才能誠實挑 epoch。日報那邊只有 441 張切不出三份，所以只有 QMS 有這個。
-    """
-    import qms
-
-    df = qms.labeled(min_class_size=min_class_size)
-    test_cells = split_cells(df, test_frac, seed=0)
-    rest = df[~df.constructionInsId.isin(test_cells)]
-    val_cells = split_cells(rest, val_frac / (1 - test_frac), seed=1)
-    is_test = df.constructionInsId.isin(test_cells)
-    is_val = df.constructionInsId.isin(val_cells) & ~is_test
-    payload = {
-        "name": name,
-        "source": "qms",
-        "testFrac": test_frac,
-        "valFrac": val_frac,
-        "testCells": sorted(test_cells),
-        "valCells": sorted(val_cells),
-        "train": sorted(df[~is_test & ~is_val].fileId.tolist()),
-        "val": sorted(df[is_val].fileId.tolist()),
-        "test": sorted(df[is_test].fileId.tolist()),
-        "labels": dict(zip(df.fileId, df.cls)),
-        "trainClassCounts": df[~is_test & ~is_val].cls.value_counts().to_dict(),
-        "testClassCounts": df[is_test].cls.value_counts().to_dict(),
-    }
-    out = _write(payload, log)
-    log(f"  val {len(payload['val'])} 張")
-    return out
-
-
-ALIAS = paths.ROOT / "reference" / "qms_to_report.yaml"
-
-
-def qms_aliased(min_class_size: int = 30):
-    """QMS 中類經 reference/qms_to_report.yaml 折進日報的類別；沒映到的整批丟掉。"""
-    import yaml
-
-    import qms
-
-    m = (yaml.safe_load(ALIAS.read_text()) or {}).get("map") or {}
-    q = qms.labeled(min_class_size=min_class_size)
-    q = q[q.cls.isin(m)].assign(cls=lambda d: d.cls.map(m))
-    return q
-
-
-def build_merged(
-    name: str = "mix-v1", report_split: str = "v1", alias: bool = True, min_class_size: int = 30, log=print
-) -> dict:
-    """C：日報 train + QMS → 測試集**原封不動用日報的 test**。
-
-    測試集不動是這個實驗唯一的意義：幾條線的分母完全一樣才比得出來。
-
-    alias=False 時直接把 QMS 中類當成新類別（實測有害，留著當對照組）。
-    """
-    rep = load(report_split)
-    import qms
-
-    q = qms_aliased(min_class_size) if alias else qms.labeled(min_class_size=min_class_size)
-    payload = {
-        "name": name,
-        "source": "merged",
-        "reportSplit": report_split,
-        "alias": alias,
-        "train": sorted(set(rep["train"]) | set(q.fileId)),
-        "test": rep["test"],
-        "labels": {**rep["labels"], **dict(zip(q.fileId, q.cls))},
-        "qmsPhotos": len(q),
-        "qmsClassCounts": q.cls.value_counts().to_dict(),
-    }
-    return _write(payload, log)
-
-
-def build_qms_only(
-    name: str = "qms-transfer", report_split: str = "v1", min_class_size: int = 30, log=print
-) -> dict:
-    """B'：**只用 QMS 訓練**，測日報的 test。純粹的領域遷移測試。"""
-    rep = load(report_split)
-    q = qms_aliased(min_class_size)
-    payload = {
-        "name": name,
-        "source": "qms-transfer",
-        "reportSplit": report_split,
-        "train": sorted(q.fileId),
-        "test": rep["test"],
-        "labels": {**rep["labels"], **dict(zip(q.fileId, q.cls))},
-        "qmsPhotos": len(q),
-        "qmsClassCounts": q.cls.value_counts().to_dict(),
-    }
-    return _write(payload, log)
-
-
 def load(name: str = "v1") -> dict:
     return json.loads((paths.SPLITS / f"{name}.json").read_text())
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--name", default=None)
+    ap.add_argument("--name", required=True)
     ap.add_argument("--test-frac", type=float, default=0.2)
-    ap.add_argument("--qms", action="store_true", help="B：QMS 自己的 train/test")
-    ap.add_argument("--transfer", action="store_true", help="B'：只用 QMS 訓練，測日報 test")
-    ap.add_argument("--merged", action="store_true", help="C：日報 + QMS 混合")
-    ap.add_argument(
-        "--with-legacy", action="store_true", help="加入舊 pptx 那批（只進 train，會多出 9 個類別）"
-    )
     ap.add_argument(
         "--min-train",
         type=int,
         default=DEFAULT_MIN_TRAIN,
         help="稀有類別訓練保底：train 少於 N 張就把含它的測試日整天搬回 train（0 = 關）",
     )
-    ap.add_argument(
-        "--legacy-fill",
-        type=int,
-        default=DEFAULT_LEGACY_FILL,
-        help="切完還不足 N 張的類別，從 legacy 補到 N（只補缺的類，不是全開；0 = 關）",
-    )
-    ap.add_argument("--no-alias", action="store_true", help="C 的對照組：不折標籤")
     ap.add_argument("--encoder", default=None, help="模型編碼器（預設 features.DEFAULT_ENCODER）")
     a = ap.parse_args()
-    if a.qms:
-        build_qms(a.name or "qms-v1", a.test_frac)
-    elif a.transfer:
-        build_qms_only(a.name or "qms-transfer")
-    elif a.merged:
-        build_merged(a.name or ("mix-raw" if a.no_alias else "mix-v1"), alias=not a.no_alias)
-    else:
-        build(
-            a.name or "v1",
-            a.test_frac,
-            with_legacy=a.with_legacy,
-            min_train=a.min_train,
-            legacy_fill=a.legacy_fill,
-            encoder_key=a.encoder,
-        )
+    build(a.name, a.test_frac, min_train=a.min_train, encoder_key=a.encoder)

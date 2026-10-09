@@ -9,7 +9,7 @@ import pandas as pd
 from PIL import Image
 
 from labels import Labeler
-from prepare import mask_corners, mask_watermark
+from prepare import mask_corners
 from split import split_dates
 from sync import KNOWN_ANNO_KEYS, anno_keys, flatten, merge_index, merge_manifest
 
@@ -465,25 +465,6 @@ def test_rare_class_floor_guards():
     assert all(len(v) >= 1 for v in new_days.values()), new_days
 
 
-def test_legacy_topup_only_fills_short_classes():
-    from split import legacy_topup
-
-    df = pd.DataFrame(
-        [{"fileId": f"p{i}", "cls": "C", "dataset": "pms"} for i in range(5)]
-        + [{"fileId": f"r{i}", "cls": "R", "dataset": "pms"} for i in range(1)]
-        + [{"fileId": f"lc{i}", "cls": "C", "dataset": "legacy"} for i in range(50)]
-        + [{"fileId": f"lr{i}", "cls": "R", "dataset": "legacy"} for i in range(50)]
-        + [{"fileId": f"lx{i}", "cls": "X", "dataset": "legacy"} for i in range(50)]
-    )
-    is_test = pd.Series(False, index=df.index)
-
-    out, _ = legacy_topup(df, is_test, floor=4, log=lambda *_: None)
-    n = out.groupby(["cls", "dataset"]).size().to_dict()
-    assert n.get(("R", "legacy")) == 3, n  # R 有 1 張 → 補到 4
-    assert ("C", "legacy") not in n, n  # C 已有 5 張 ≥ 4 → 一張都不補
-    assert "X" not in set(out.cls), n  # legacy 專屬的類別不在這裡開，那是 --with-legacy 的事
-
-
 def test_mask_corners_hits_four_corners():
     im = Image.new("RGB", (1000, 1000), (255, 0, 0))
     out = mask_corners(im)
@@ -517,16 +498,6 @@ def test_process_mask_false_keeps_corners(tmp_path):
     assert Image.open(dst).getpixel((2, 2))[0] > 200  # 左上角沒被灰掉
     prepare.process(src, dst, "report", mask=True)
     assert Image.open(dst).getpixel((2, 2))[0] < 200
-
-
-def test_mask_watermark_covers_qms_box_only():
-    """QMS 只遮左下浮水印（實測 x 2%~52% / y 65%~97%），四角不動。"""
-    im = Image.new("RGB", (1000, 1000), (255, 0, 0))
-    out = mask_watermark(im)
-    for x, y in [(20, 650), (520, 970), (300, 800)]:  # 浮水印代表點
-        assert out.getpixel((x, y)) == (127, 127, 127), (x, y)
-    for x, y in [(5, 5), (995, 5), (995, 995), (700, 500)]:  # 四角與主體保留
-        assert out.getpixel((x, y)) == (255, 0, 0), (x, y)
 
 
 def test_review_overrides_beat_the_title_rule():
@@ -651,41 +622,6 @@ def test_human_refs_reads_chips_and_speckey():
     assert pd.isna(got.clsChips[2])  # 沒填 → NaN，不參與比對
     assert got.specTrade[0] == "泥作" and got.specTrade[2] == "油漆"
     assert pd.isna(got.specTrade[1])
-
-
-def test_dhash_survives_recompression_but_separates_photos():
-    """跨來源去重的前提：同一張照片重壓縮後 dhash 仍相同，不同照片不能撞。
-
-    sha1 對重壓縮完全無效（pptx 一定會重編碼），這條就是在守 dhash 有沒有做到。
-    """
-    import io
-
-    from legacy import dhash
-
-    a = Image.new("RGB", (400, 300))
-    for x in range(400):  # 有梯度才有明暗結構可比
-        for y in range(0, 300, 30):
-            a.paste((x % 256, (x * 2) % 256, y % 256), (x, y, x + 1, y + 30))
-    buf = io.BytesIO()
-    a.save(buf, "JPEG", quality=30)  # 重壓縮 + 縮小，模擬貼進 pptx
-    a2 = Image.open(buf).resize((260, 195))
-    assert dhash(a) == dhash(a2)
-
-    b = a.transpose(Image.FLIP_LEFT_RIGHT)  # 不同畫面就該不同
-    assert dhash(a) != dhash(b)
-
-
-def test_legacy_site_alias_matches_pms_names():
-    """工地名對不上 PMS 的話，「同工地不跨組」這條鐵律就形同虛設。"""
-    import legacy
-    from legacy import site_from
-
-    # 別名表外移 reference/（公司資料不入 git）——測試自帶臨時表驗證套用邏輯
-    legacy.SITE_ALIAS = {"甲": "甲案", "乙區": "乙案"}
-    assert site_from("甲案進度報告115.01.12", "x.pptx") == "甲案"
-    assert site_from("乙區進度報告", "x.pptx") == "乙案"
-    assert site_from("", "乙區_115.08.10.pptx") == "乙案"
-    assert site_from("新工地進度報告", "x.pptx") == "新工地"  # 不在表上：原樣
 
 
 def test_drop_fallback_removes_the_junk_bag():

@@ -118,22 +118,14 @@ def legacy_manifest() -> pd.DataFrame:
     )
 
 
-def labeled_manifest(active_only: bool = True, with_legacy: bool = False) -> pd.DataFrame:
-    """PMS 日報（＋選配的舊 pptx）→ 加上 cls 欄。
-
-    兩批**合併後才套規則**，不是各自套：`min_class_size` 的門檻是對整個訓練集算的，
-    分開套會得到兩套不同的類別集合，接不起來（舊資料正好補的就是原本不足被 drop 的類）。
-    """
+def labeled_manifest(active_only: bool = True) -> pd.DataFrame:
+    """PMS 日報施作照 → 加上 cls 欄（舊 pptx 不進訓練；G1 抽樣另用 legacy_manifest）。"""
     df = pd.read_csv(paths.MANIFEST)
     df = work_items(df)
     if active_only and "active" in df:
         df = df[df.active.astype(str).str.lower().isin(["true", "1"])]
     df = df.assign(dataset="pms")
     df = df.join(human_refs(df, Labeler.load()))
-    if with_legacy:
-        lg = legacy_manifest()
-        if len(lg):
-            df = pd.concat([df, lg], ignore_index=True)
     return Labeler.load().apply(df)
 
 

@@ -238,7 +238,7 @@ def test_pipeline_uses_pms_split_and_records_catalog(pms_env, monkeypatch):
     )
     result = pms_workflow.build_split("pms-test")
     assert result["encoder"] == features.DEFAULT_ENCODER
-    assert calls[-1]["legacy_fill"] == 0 and calls[-1]["with_legacy"] is False
+    assert calls[-1] == {"name": "pms-test", "log": calls[-1]["log"]}  # 主線切分沒有任何 legacy 選項
     assert result["pmsCatalogVersion"] == review.catalog_version()
     assert not (paths.SPLITS / "CURRENT").exists()
     with pytest.raises(ValueError):

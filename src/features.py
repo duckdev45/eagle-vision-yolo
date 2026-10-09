@@ -37,7 +37,7 @@ DEFAULT_ENCODER = "so400m"
 LEGACY_ENCODER = "siglip"
 
 
-SRC = {"report": ("images", ""), "qms": ("qms_images", "qms-"), "legacy": ("legacy_images", "legacy-")}
+SRC = {"report": ("images", ""), "legacy": ("legacy_images", "legacy-")}
 
 
 def extract(
@@ -48,7 +48,7 @@ def extract(
     from PIL import Image
 
     paths.ensure_dirs()
-    img_dir = {"report": paths.IMAGES, "qms": paths.QMS_IMAGES, "legacy": paths.LEGACY_IMAGES}[src]
+    img_dir = {"report": paths.IMAGES, "legacy": paths.LEGACY_IMAGES}[src]
     out = paths.FEATURES / f"{SRC[src][1]}{model_key}.npz"
     files = sorted(p for p in img_dir.glob("*.jpg"))
     if not files:
@@ -158,7 +158,7 @@ def load(model_key: str = "siglip") -> tuple[list[str], np.ndarray]:
     """合併所有資料源的 embedding（fileId 是 uuid，不會撞）。"""
     ids: list[str] = []
     embs = []
-    for prefix in ("", "qms-", "legacy-", "crops-"):
+    for prefix in ("", "legacy-", "crops-"):
         f = paths.FEATURES / f"{prefix}{model_key}.npz"
         if f.exists():
             z = np.load(f, allow_pickle=True)
@@ -174,7 +174,7 @@ def load(model_key: str = "siglip") -> tuple[list[str], np.ndarray]:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=DEFAULT_ENCODER, choices=list(MODELS))
-    ap.add_argument("--src", default="report", choices=["report", "qms", "legacy", "all"])
+    ap.add_argument("--src", default="report", choices=["report", "legacy", "all"])
     ap.add_argument("--force", action="store_true", help="影像重做過就要加這個")
     ap.add_argument("--crops", action="store_true", help="改成抽人標框裡那塊的 embedding")
     a = ap.parse_args()

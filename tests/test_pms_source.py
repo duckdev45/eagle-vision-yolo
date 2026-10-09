@@ -102,9 +102,7 @@ def test_new_split_never_includes_workforce_override_or_crop(pms_env, monkeypatc
             )
         ),
     )
-    payload = split_mod.build(
-        "only-work-items", with_legacy=False, legacy_fill=0, min_train=0, log=lambda *a: None
-    )
+    payload = split_mod.build("only-work-items", min_train=0, log=lambda *a: None)
     assert "worker-labelled" not in payload["labels"]
     assert "worker-labelled#0" not in payload["train"]
     assert not {"worker", "source-missing", "free-content"} & set(payload["train"] + payload["test"])

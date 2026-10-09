@@ -30,9 +30,6 @@ sys.path.insert(0, os.path.dirname(__file__))
 import paths  # noqa: E402
 
 CORNER_W, CORNER_H = 0.30, 0.12  # 日報膠囊：四角
-# QMS 浮水印：實測 x 2%~52% / y 65%~97%，烤死在原檔上，沒有乾淨版本。
-# 留 margin 吸收機型解析度差異。
-WATERMARK = (0.0, 0.60, 0.56, 1.0)  # (x0, y0, x1, y1) 比例
 LONG_EDGE = 512
 FILL = (127, 127, 127)
 CLEAN_FROM = "2026-08-14"  # 這天起日報照存乾淨 raw，畫面上不再有膠囊
@@ -67,26 +64,17 @@ def mask_corners(
     return im
 
 
-def mask_watermark(im: Image.Image, fill=FILL) -> Image.Image:
-    """QMS：只有左下浮水印（實測 x 2%~52% / y 65%~97%，留 margin）。"""
-    w, h = im.size
-    x0, y0, x1, y1 = WATERMARK
-    ImageDraw.Draw(im).rectangle([int(w * x0), int(h * y0), int(w * x1), int(h * y1)], fill=fill)
-    return im
-
-
 def mask_none(im: Image.Image) -> Image.Image:
     """舊 pptx：照片是原檔貼進投影片的，畫面上沒有系統烤的東西，沒得遮。"""
     return im
 
 
-# 資料源 → 遮罩。三邊遮的東西不同，因為三邊烤上去的東西不同。
-# 這在**兩階段微調**下是安全的：QMS 預訓練與 PMS 微調的資料不在同一個分類器裡競爭，
-# 遮罩形狀無從變成「哪個系統 → 哪個工種」的捷徑。若哪天要單一分類器混訓，這條要重談。
-MASKS = {"report": mask_corners, "qms": mask_watermark, "legacy": mask_none}
+# 資料源 → 遮罩。兩邊遮的東西不同，因為兩邊烤上去的東西不同。
+# legacy（舊 pptx 照片）只供 G1 黃金集與 G2 考卷的特徵，不進訓練。
+# QMS 浮水印遮罩隨 QMS 實驗線於 2026-10-09 移除（資料見 data/archive/README.md）。
+MASKS = {"report": mask_corners, "legacy": mask_none}
 SRC_DIRS = {
     "report": (paths.PHOTOS, paths.IMAGES),
-    "qms": (paths.QMS_PHOTOS, paths.QMS_IMAGES),
     "legacy": (paths.LEGACY_PHOTOS, paths.LEGACY_IMAGES),
 }
 
@@ -111,7 +99,7 @@ def process(src, dst, kind: str = "report", mask: bool = True) -> None:
 def run(force: bool = False, kind: str = "report", log=print) -> dict:
     paths.ensure_dirs()
     src_dir, out_dir = SRC_DIRS[kind]
-    clean = clean_ids() if kind == "report" else set()  # QMS 浮水印照樣烤死，全遮
+    clean = clean_ids() if kind == "report" else set()
     done = skipped = failed = unmasked = invalid = 0
     for src in sorted(src_dir.iterdir()):
         if not src.is_file() or src.name.startswith("."):
@@ -141,7 +129,7 @@ def run(force: bool = False, kind: str = "report", log=print) -> dict:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true")
-    ap.add_argument("--src", default="report", choices=["report", "qms", "legacy", "all"])
+    ap.add_argument("--src", default="report", choices=["report", "legacy", "all"])
     a = ap.parse_args()
     for k in list(SRC_DIRS) if a.src == "all" else [a.src]:
         run(a.force, k)

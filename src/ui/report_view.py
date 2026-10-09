@@ -1,4 +1,4 @@
-"""報告分頁 —— PMS 與 QMS 共用同一份報告格式。"""
+"""報告分頁 —— 模型考得怎樣（讀 reports/ 的 metrics）。"""
 
 from __future__ import annotations
 

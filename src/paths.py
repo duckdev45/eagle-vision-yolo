@@ -28,21 +28,13 @@ DEFECTS = ROOT / "data" / "defects.csv"
 GOLDEN = ROOT / "data" / "golden"  # G1 黃金集：manifest + 兩位標註者的裁決
 CVAT = ROOT / "data" / "cvat"  # CVAT 進出：task manifest（匯出）與 XML（匯入暫存）
 
-# --- QMS 稽核照（另一個系統、另一套標籤，刻意不與日報混在同一棵樹）---------
-# --- 舊版 pptx 進度報告（第三個資料源）------------------------------------
-# 與日報同分佈（同一批工地主任、同一種構圖），但**不是**同一個系統產的，
-# 所以分開放：來源要看得出來，混在 raw/photos 裡就再也分不清哪張是哪來的。
+# --- 舊版 pptx 進度報告 ----------------------------------------------------
+# 與日報同分佈但不同系統產的，分開放。2026-10-09 起不進訓練，只供 G1 黃金集／G2 考卷／CVAT。
+# QMS 稽核照、Jev、VLM PoC、convnext 微調的資料已封存到 data/archive/（清單見其 README.md）。
 LEGACY = ROOT / "data" / "legacy"
 LEGACY_PHOTOS = LEGACY / "raw" / "photos"  # {sha1}.{ext}，檔名就是內容雜湊
 LEGACY_MANIFEST = LEGACY / "raw" / "manifest.csv"
 LEGACY_IMAGES = LEGACY / "derived" / "images"
-
-QMS = ROOT / "data" / "qms"
-QMS_PHOTOS = QMS / "raw" / "photos"  # {fileId}.jpg，浮水印烤死在畫面上
-QMS_MANIFEST = QMS / "raw" / "manifest.csv"
-QMS_CELLS = QMS / "raw" / "cells.csv"  # 母體清單（抽樣前的全部格子）
-QMS_IMAGES = QMS / "derived" / "images"
-QMS_TREE = QMS / "derived" / "tree"
 
 # --- Field Reports 缺失照片語料（樂氧森 2026-08-28 快照，2026-09-01 進站）------
 # 第四資料源，與日報/QMS/LEGACY sha1 零重疊。單日單場 → 只當煙霧測試＋標註練兵，
@@ -50,10 +42,7 @@ QMS_TREE = QMS / "derived" / "tree"
 FIELD_REPORTS = ROOT / "data" / "field_reports"
 FR_PHOTOS = FIELD_REPORTS / "raw" / "photos"  # {photoId}.webp（1600px 衍生層，非 raw）
 FR_MANIFEST = FIELD_REPORTS / "raw" / "manifest.csv"  # site=樂氧森（原值留在 siteRaw）
-FR_GDINO = FIELD_REPORTS / "derived" / "gdino"  # GDINO pre-annotations（AI_GUESS）
-FR_VLM = FIELD_REPORTS / "derived" / "vlm"  # gemma4:e4b 缺失判定（AI_GUESS）
-
-VLM = DERIVED / "vlm"  # gemma4:e4b 判定輸出（尺入鏡 PoC 等，AI_GUESS 層）
+FR_GDINO = FIELD_REPORTS / "derived" / "gdino"  # GDINO pre-annotations（AI_GUESS；yolo_dataset 量測用）
 
 # --- 每日分流（core/routing.py、src/daily.py）---------------------------------
 # 分流結果是 derived（隨時可由規則＋模型重算）；抽查紀錄與每日紀錄是人看的歷史，
@@ -80,9 +69,6 @@ def ensure_dirs() -> None:
         TREE,
         REPORTS_OUT,
         MODELS,
-        QMS_PHOTOS,
-        QMS_IMAGES,
-        QMS_TREE,
         LEGACY_PHOTOS,
         LEGACY_IMAGES,
         FR_GDINO,

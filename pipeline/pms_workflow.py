@@ -38,7 +38,7 @@ def build_split(name: str, log=print) -> dict:
     import features
     import split as split_mod
 
-    sp = split_mod.build(name=name, with_legacy=False, legacy_fill=0, log=log)
+    sp = split_mod.build(name=name, log=log)
     encoder = sp.setdefault("encoder", features.DEFAULT_ENCODER)
     if not sp["train"] or not sp["test"]:
         raise ValueError("PMS 訓練或測試集為空，需要更多不同日期的有效照片。")

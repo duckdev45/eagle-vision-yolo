@@ -14,7 +14,6 @@ from labels import Labeler
 from .common import run_step
 from .data import load_manifest
 from .inbox import status_panel
-from .legacy_ui import legacy_page
 from .pipeline import pipeline_panel
 from .pms_workbench import workbench
 from .report_view import report_view
@@ -83,9 +82,6 @@ def pms_page(section: str) -> None:
     if section == "新工種候選":
         workbench("candidates")
 
-    if section == "歷史資料":
-        legacy_page()
-
     if section == "標籤規則":
         st.subheader("labels.yaml")
         st.caption(
@@ -108,10 +104,7 @@ def pms_page(section: str) -> None:
                 [
                     p
                     for p in paths.REPORTS_OUT.glob("*")
-                    if p.is_dir()
-                    and "qms" not in p.name
-                    and (p / "config.json").exists()
-                    and (p / "metrics.json").exists()
+                    if p.is_dir() and (p / "config.json").exists() and (p / "metrics.json").exists()
                 ],
                 reverse=True,
             )
