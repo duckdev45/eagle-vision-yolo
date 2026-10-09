@@ -13,7 +13,7 @@ import pytest
 from PIL import Image
 
 import prepare
-from core import paths, pms_review
+from core import paths, pms_photos
 from pms_inference import InferenceError, PmsShadowPredictor, prepared_photo
 from pms_shadow_api import handler_for
 
@@ -38,7 +38,7 @@ def _test_artifact():
                 "source": "report",
                 "trainLegacy": [],
                 "classes": ["泥作-打底", "油漆-塗裝"],
-                "pmsCatalogVersion": pms_review.catalog_version(),
+                "pmsCatalogVersion": pms_photos.catalog_version(),
             },
             ensure_ascii=False,
         )
@@ -63,7 +63,7 @@ def test_online_preparation_matches_batch_and_returns_versioned_suggestion(pms_e
     assert response["suggestedClass"] == "泥作-打底"
     assert response["modelScore"] == 0.8
     assert response["modelVersion"] == "vtest"
-    assert response["catalogVersion"] == pms_review.catalog_version()
+    assert response["catalogVersion"] == pms_photos.catalog_version()
     assert response["modelSha256"]
     assert response["encoderVersion"].startswith("siglip/")
 
@@ -144,7 +144,7 @@ def test_prediction_fuses_work_item_siblings_and_reads_encoder_from_split(pms_en
         "source": "report",
         "trainLegacy": [],
         "classes": ["泥作-打底", "油漆-塗裝"],
-        "pmsCatalogVersion": pms_review.catalog_version(),
+        "pmsCatalogVersion": pms_photos.catalog_version(),
         "encoder": registry.DEFAULT_ENCODER,
     }
     (paths.SPLITS / "vfuse.json").write_text(json.dumps(split, ensure_ascii=False))
@@ -181,7 +181,7 @@ def test_prediction_uses_title_stage_when_mortar_stage_is_uncertain(pms_env, mon
     _test_artifact()
     split = json.loads((paths.SPLITS / "vtest.json").read_text())
     split["classes"] = list(StageProbe.classes_)
-    split["pmsCatalogVersion"] = pms_review.catalog_version()
+    split["pmsCatalogVersion"] = pms_photos.catalog_version()
     (paths.SPLITS / "vtest.json").write_text(json.dumps(split, ensure_ascii=False))
     (paths.MODELS / "probe-siglip-vtest.pkl").write_bytes(
         pickle.dumps({"clf": StageProbe(), "split": "vtest", "encoder": "siglip"})

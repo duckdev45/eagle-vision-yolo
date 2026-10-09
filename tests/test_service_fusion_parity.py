@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from core import pms_review
+from core import pms_model
 from core.evaluation_metrics import REVIEW_CONFIDENCE, fuse_work_items
 
 _spec = importlib.util.spec_from_file_location(
@@ -19,8 +19,8 @@ _spec.loader.exec_module(fusion)
 
 def test_constants_match():
     assert fusion.REVIEW_CONFIDENCE == REVIEW_CONFIDENCE
-    assert fusion.STAGE_CLASSES == pms_review.STAGE_CLASSES
-    assert (fusion.STAGE_GROUP, fusion.STAGE_SHARE) == (pms_review.STAGE_GROUP, pms_review.STAGE_SHARE)
+    assert fusion.STAGE_CLASSES == pms_model.STAGE_CLASSES
+    assert (fusion.STAGE_GROUP, fusion.STAGE_SHARE) == (pms_model.STAGE_GROUP, pms_model.STAGE_SHARE)
 
 
 def test_fusion_and_stage_match_core():
@@ -32,11 +32,11 @@ def test_fusion_and_stage_match_core():
         assert np.allclose(fusion.fuse(p), fuse_work_items(p, ["k"] * n))
         for row in p:
             for title in titles:
-                assert fusion.resolve_stage(row, classes, title) == pms_review.resolve_stage(
+                assert fusion.resolve_stage(row, classes, title) == pms_model.resolve_stage(
                     row, classes, title
                 )
     stage_zone = np.array([0.02, 0.50, 0.46, 0.02])
     for title in titles:
-        assert fusion.resolve_stage(stage_zone, classes, title) == pms_review.resolve_stage(
+        assert fusion.resolve_stage(stage_zone, classes, title) == pms_model.resolve_stage(
             stage_zone, classes, title
         )

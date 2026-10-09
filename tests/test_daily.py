@@ -76,7 +76,7 @@ def test_promote_switches_logs_and_exports_only_when_passed(pms_env, monkeypatch
 
     registry.set_current("v1")
     monkeypatch.setattr(
-        registry, "load_split", lambda name: {"pmsCatalogVersion": promotion.pms_review.catalog_version()}
+        registry, "load_split", lambda name: {"pmsCatalogVersion": promotion.pms_photos.catalog_version()}
     )
     exported: list[str] = []
 
@@ -98,7 +98,7 @@ def test_failed_export_does_not_hide_the_switch(pms_env, monkeypatch):
 
     registry.set_current("v1")
     monkeypatch.setattr(
-        registry, "load_split", lambda name: {"pmsCatalogVersion": promotion.pms_review.catalog_version()}
+        registry, "load_split", lambda name: {"pmsCatalogVersion": promotion.pms_photos.catalog_version()}
     )
     monkeypatch.setattr(promotion, "exam", lambda c, b: _exam(BASE, BASE))
 

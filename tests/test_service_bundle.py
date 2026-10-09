@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from core import model_registry as registry
-from core import paths, pms_review
+from core import paths, pms_photos
 
 
 def _trained_version(name: str = "v9") -> None:
@@ -26,7 +26,7 @@ def _trained_version(name: str = "v9") -> None:
                 "source": "report",
                 "encoder": "siglip",
                 "classes": classes,
-                "pmsCatalogVersion": pms_review.catalog_version(),
+                "pmsCatalogVersion": pms_photos.catalog_version(),
                 "train": [],
                 "test": [],
                 "labels": {},
@@ -52,7 +52,7 @@ def test_export_bundle_writes_head_encoder_and_checked_metadata(pms_env):
 
     meta = json.loads((out / "metadata.json").read_text(encoding="utf-8"))
     assert meta["modelVersion"] == "v9" and meta["encoderKey"] == "siglip"
-    assert meta["catalogVersion"] == pms_review.catalog_version()
+    assert meta["catalogVersion"] == pms_photos.catalog_version()
     assert sorted(meta["classes"]) == sorted(["油漆-塗裝", "泥作-打底", "防水-塗佈"])
     head = np.load(out / "classifier.npz")
     assert head["coef"].shape == (3, 4)

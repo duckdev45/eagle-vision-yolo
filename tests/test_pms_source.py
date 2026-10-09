@@ -5,9 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from core import paths
+from core import paths, pms_decisions, pms_photos
 from core import pms_exchange as exchange
-from core import pms_review as review
 from core.labeler import Labeler, save_review
 from core.pms_source import work_items
 
@@ -34,7 +33,7 @@ def add_sources():
 def test_source_filter_keeps_work_items_including_demolition(pms_env):
     add_sources()
     before = paths.MANIFEST.read_bytes()
-    pool = review.load_pool()
+    pool = pms_photos.load_pool()
     assert "work-demolition" in set(pool.fileId)
     assert not {"worker", "worker-labelled", "source-missing", "free-content", "foreign"} & set(pool.fileId)
     assert set(pool.source) == {"WORK_ITEM"}
@@ -45,7 +44,7 @@ def test_missing_source_fails_without_guessing_from_title(pms_env):
     df = pd.read_csv(paths.MANIFEST).drop(columns="source")
     df.to_csv(paths.MANIFEST, index=False)
     with pytest.raises(ValueError, match="source"):
-        review.load_pool()
+        pms_photos.load_pool()
     assert work_items(pd.DataFrame()).empty
 
 
@@ -56,9 +55,11 @@ def test_workforce_cannot_enter_review_operations(pms_env, operation):
         if operation == "export":
             exchange.export_packet(["a", "worker"])
         elif operation == "decide":
-            review.decide("worker", "classified", reviewer="tester", label="泥作-打底")
+            pms_decisions.decide("worker", "classified", reviewer="tester", label="泥作-打底")
         else:
-            review.propose_candidate("拆除-打石", ["worker-labelled"], reviewer="tester", definition="測試")
+            pms_decisions.propose_candidate(
+                "拆除-打石", ["worker-labelled"], reviewer="tester", definition="測試"
+            )
 
 
 def test_training_and_review_share_source_filter_even_with_old_override(pms_env):

@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable
 
 from core import model_registry as registry
-from core import paths, pms_review
+from core import paths, pms_photos
 
 
 def check_new_run(name: str) -> None:
@@ -54,8 +54,8 @@ def build_split(name: str, log=print) -> dict:
     missing = set(sp["train"] + sp["test"]) - available
     if missing:
         raise ValueError(f"{len(missing)} 張照片缺少圖像特徵，請檢查前處理結果：{sorted(missing)[:5]}")
-    sp["pmsCatalogVersion"] = pms_review.catalog_version()
-    sp["pmsCatalog"] = pms_review.catalog()
+    sp["pmsCatalogVersion"] = pms_photos.catalog_version()
+    sp["pmsCatalog"] = pms_photos.catalog()
     sp["trainingPolicy"] = "pms-only; human overrides title rules; pending candidates excluded"
     registry.split_path(name).write_text(json.dumps(sp, ensure_ascii=False, indent=1), encoding="utf-8")
     return sp

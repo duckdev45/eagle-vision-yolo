@@ -11,7 +11,7 @@ import json
 import uuid
 import zipfile
 
-from core import pms_review as review
+from core import pms_photos
 from core import pms_store as store
 
 PROMPT = """# PMS 日報照片工種複核
@@ -46,15 +46,15 @@ def context_of(row: dict) -> dict:
 def export_packet(file_ids: list[str]) -> tuple[str, bytes]:
     if len(file_ids) > 50:
         raise ValueError("每批最多 50 張，請分批審閱。")
-    selected = review._photos(file_ids)
+    selected = pms_photos.require_photos(file_ids)
     packet_id = uuid.uuid4().hex
-    version = review.catalog_version()
+    version = pms_photos.catalog_version()
     items, contexts = [], []
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
         for row in selected.to_dict("records"):
             fid = row["fileId"]
-            blob = review.photo_bytes(fid)
+            blob = pms_photos.photo_bytes(fid)
             context = context_of(row)
             contexts.append(context)
             items.append(
@@ -93,7 +93,7 @@ def export_packet(file_ids: list[str]) -> tuple[str, bytes]:
         }
         for name, obj in (
             ("packet.json", packet),
-            ("catalog.json", review.catalog()),
+            ("catalog.json", pms_photos.catalog()),
             ("context.json", contexts),
             ("response-template.json", template),
         ):
@@ -107,14 +107,14 @@ def export_packet(file_ids: list[str]) -> tuple[str, bytes]:
 def validate_fresh(item: dict, row: dict) -> None:
     if item["contextHash"] != store.digest(context_of(row)):
         raise ValueError(f"{row['fileId']} 的日報內容已更新，請重新匯出審閱包。")
-    if item["imageHash"] != hashlib.sha256(review.photo_bytes(row["fileId"])).hexdigest():
+    if item["imageHash"] != hashlib.sha256(pms_photos.photo_bytes(row["fileId"])).hexdigest():
         raise ValueError(f"{row['fileId']} 的圖片已更新，請重新匯出審閱包。")
 
 
 def validate_proposal(proposal: dict) -> None:
-    if proposal["catalogVersion"] != review.catalog_version():
+    if proposal["catalogVersion"] != pms_photos.catalog_version():
         raise ValueError("建議的分類表版本已過期，請重新審閱。")
-    row = review._photos([proposal["fileId"]]).iloc[0].to_dict()
+    row = pms_photos.require_photos([proposal["fileId"]]).iloc[0].to_dict()
     validate_fresh(proposal, row)
 
 
@@ -128,7 +128,7 @@ def import_suggestions(payload: dict) -> int:
     packet = store.latest("packet").get(packet_id)
     if not packet:
         raise ValueError("找不到本機發出的審閱包，請先匯出。")
-    version = review.catalog_version()
+    version = pms_photos.catalog_version()
     if payload.get("catalogVersion") != version or packet["catalogVersion"] != version:
         raise ValueError("分類表已改版，請重新匯出審閱包。")
     model = payload.get("model")
@@ -143,8 +143,8 @@ def import_suggestions(payload: dict) -> int:
     items = {r["fileId"]: r for r in packet["items"]}
     if len(ids) != len(set(ids)) or set(ids) != set(items):
         raise ValueError("回覆必須包含封包內所有照片，且每張恰好一筆。")
-    selected = review._photos(ids)
-    known = review.catalog()
+    selected = pms_photos.require_photos(ids)
+    known = pms_photos.catalog()
     saved = store.latest("suggestion")
     records = []
     for r in results:

@@ -28,9 +28,9 @@ import pandas as pd
 
 from core import paths
 
-# 缺失字與工作台缺失旗標同一個來源（core.pms_review.DEFECT_TITLE）。v17 起有工種的缺改照
+# 缺失字與工作台缺失旗標同一個來源（core.pms_model.DEFECT_TITLE）。v17 起有工種的缺改照
 # 歸工種，所以這裡直接看標題，不看 cls。
-from core.pms_review import DEFECT_TITLE
+from core.pms_model import DEFECT_TITLE
 
 DEFECT_CLASS = "雜項-缺失改善"
 IMAGE_PRECISION = 0.8  # 圖像旗標門檻：OOF 上（對標題弱標籤）precision ≥ 此值的最低分數
@@ -63,7 +63,7 @@ def run(model_key: str | None = None, seeds: int = 3, log=print) -> dict:
 
     from core import model_registry as registry
     from core.labeler import load_reviews
-    from core.pms_review import load_pool, work_item_keys
+    from core.pms_photos import load_pool, work_item_keys
 
     model_key = model_key or registry.DEFAULT_ENCODER
     z = np.load(registry.feature_path(model_key), allow_pickle=True)

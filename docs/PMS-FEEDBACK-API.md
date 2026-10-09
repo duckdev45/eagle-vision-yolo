@@ -49,7 +49,7 @@ actorId、角色、事件 ID 與原始預測。重送同一 key 回同一事件�
 新工種候選另用 `POST /v1/pms/class-candidates`，最少帶暫定名稱、代表照片 `fileIds`、可見共同特徵與
 判斷依據；可補充不屬於此類的照片或情況。先讓現場在照片頁按「找不到合適工種」並留下描述，
 品管再彙整多張代表照片、查重既有類別與規範，交專家核准正式名稱、定義、排除條件與分類樹／QS 依據。
-既有 `core/pms_review.py` 已有 `propose_candidate()` 與 `resolve_candidate()`，可沿用同樣的狀態規則。
+既有 `core/pms_decisions.py` 已有 `propose_candidate()` 與 `resolve_candidate()`，可沿用同樣的狀態規則。
 核准只更新分類表；候選照片仍須逐張人工裁決，累積足夠且跨案場的樣本後才進下一版重訓和評估。
 在那之前，系統顯示「待審新工種」，不可硬塞到最像的舊類或宣稱模型已學會。
 
@@ -72,7 +72,7 @@ PMS／EagleField 照片頁 → 預測 API（模型版本、信心、類別）
                 人工核准切換／可回退版本
 ```
 
-現有 `core/pms_review.py` 的 `decide()`／`data/review.csv` 是人工真值入口，
+現有 `core/pms_decisions.py` 的 `decide()`／`data/review.csv` 是人工真值入口，
 `core/pms_store.py` 已有追加事件與版本檢查；API 應在共用服務層接入這些規則，
 不要讓現場 App 直接寫 CSV 或 SQLite。因現有 CSV 與 SQLite 不是跨檔案交易，
 正式多人併發服務需要把真值和事件放到同一個交易資料庫，再從快照匯出給現有訓練程式。

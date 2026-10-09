@@ -5,8 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from core import pms_decisions
 from core import pms_exchange as exchange
-from core import pms_review as review
 from core import pms_store as store
 from core import pms_vision as vision
 
@@ -101,7 +101,7 @@ def suggestion_card(proposal: dict, reviewer: str, *, key: str, expected_revisio
         "確認採用此 AI 類別", key=key, disabled=not fresh or not reviewer.strip()
     ):
         try:
-            review.decide(
+            pms_decisions.decide(
                 proposal["fileId"],
                 "classified",
                 reviewer=reviewer,

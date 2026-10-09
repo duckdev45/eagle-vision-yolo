@@ -19,7 +19,7 @@ from PIL import Image
 import features
 import prepare
 from core import model_registry as registry
-from core import paths, pms_review, pms_store
+from core import paths, pms_model, pms_photos, pms_store
 from core.evaluation_metrics import REVIEW_CONFIDENCE, fuse_work_items
 from photo_quality import bytes_problem
 
@@ -49,7 +49,7 @@ def _artifact(version: str) -> tuple[dict, object, str]:
     model = pickle.loads(model_bytes)
     if model.get("split") != version or model.get("encoder") != encoder:
         raise InferenceError("artifact_mismatch", "模型檔與切分版本或編碼器不相符。")
-    if split.get("pmsCatalogVersion") != pms_review.catalog_version():
+    if split.get("pmsCatalogVersion") != pms_photos.catalog_version():
         raise InferenceError("catalog_changed", "分類表與模型訓練時不同，請先確認版本。")
     clf = model["clf"]
     if set(clf.classes_) != set(split["classes"]):
@@ -70,7 +70,7 @@ def _raw_photo(file_id: str) -> Path:
 
 
 def _manifest_row(file_id: str) -> dict:
-    pool = pms_review.load_pool()
+    pool = pms_photos.load_pool()
     rows = pool.loc[pool.fileId == file_id]
     if len(rows) != 1:
         raise InferenceError("not_work_item", "照片不在有效的 PMS 施作項目母體。")
@@ -128,13 +128,13 @@ class PmsShadowPredictor:
 
     def _siblings(self, file_id: str) -> list[str]:
         """同日報×同標題的其他施作照；缺日報 id 就不融合。"""
-        pool = pms_review.load_pool()
-        keys = pms_review.work_item_keys(pool)
+        pool = pms_photos.load_pool()
+        keys = pms_photos.work_item_keys(pool)
         key = keys.get(file_id, "")
         return [f for f, k in keys.items() if key and k == key and f != file_id]
 
     def predict(self, file_id: str) -> dict:
-        if pms_review.catalog_version() != self.catalog_version:
+        if pms_photos.catalog_version() != self.catalog_version:
             raise InferenceError("catalog_changed", "分類表與模型訓練時不同，請先確認版本。")
         jpeg = prepared_photo(file_id)
         rows = [self.clf.predict_proba(self._encode(jpeg))[0]]
@@ -149,7 +149,7 @@ class PmsShadowPredictor:
         top = np.argsort(scores)[::-1][:3]
         title = _manifest_row(file_id).get("title", "")
         # 打底／粉光：圖像只確定泥作群、階段不確定時看標題；標題沒寫階段 → manual（轉人工）
-        suggested, stage = pms_review.resolve_stage(scores, self.clf.classes_, title)
+        suggested, stage = pms_model.resolve_stage(scores, self.clf.classes_, title)
         return {
             "fileId": file_id,
             "status": "review_required",
@@ -167,5 +167,5 @@ class PmsShadowPredictor:
             "lowConfidence": bool(scores[top[0]] < REVIEW_CONFIDENCE or stage == "manual"),
             "stageDecision": stage,
             # 缺失旗標與工種正交（v17）；這裡只回標題弱標籤，圖像分數與人工修改在工作台
-            "defectTitle": pms_review.defect_title(title),
+            "defectTitle": pms_model.defect_title(title),
         }

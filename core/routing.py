@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 
 from core import model_registry as registry
-from core import paths, pms_review
+from core import paths, pms_decisions, pms_model, pms_photos
 from core import pms_store as store
 from core.evaluation_metrics import fuse_work_items
 from core.labeler import Labeler, load_reviews
@@ -109,16 +109,16 @@ def oof_proba(X, y, groups, classes: list[str], *, folds: int = OOF_FOLDS, C: fl
 
 def _resolve(proba, classes: list[str], titles: list[str]) -> list[tuple[str, float, str]]:
     """(類別, 信心, 決定來源)。打底／粉光由標題定階段時，信心用「泥作打底粉光群」的總機率——
-    圖像只負責判群，階段交給標題（與工作台同一條規則，見 pms_review.resolve_stage）。"""
+    圖像只負責判群，階段交給標題（與工作台同一條規則，見 pms_model.resolve_stage）。"""
     out = []
     for p, title in zip(proba, titles):
         if not p.any():
             out.append(("", 0.0, ""))
             continue
-        pred, source = pms_review.resolve_stage(p, classes, title)
+        pred, source = pms_model.resolve_stage(p, classes, title)
         conf = float(p.max())
         if source == "title":
-            conf = float(sum(p[classes.index(c)] for c in pms_review.STAGE_CLASSES))
+            conf = float(sum(p[classes.index(c)] for c in pms_model.STAGE_CLASSES))
         out.append((pred, conf, source))
     return out
 
@@ -133,10 +133,10 @@ def model_signals(log=print) -> tuple[pd.DataFrame, dict]:
         log(f"⚠ {name} 缺 split／特徵／探針，模型訊號暫缺（全部照片會進隔離或佇列）")
         return empty, meta
     sp = registry.load_split(name)
-    pool = pms_review.load_pool()
+    pool = pms_photos.load_pool()
     titles = dict(zip(pool.fileId, pool.title))
     groups = {r.fileId: f"{r.constrId}|{r.reportDate}" for r in pool.itertuples()}
-    keys = pms_review.work_item_keys(pool)
+    keys = pms_photos.work_item_keys(pool)
     with np.load(feature, allow_pickle=True) as z:
         ids = [str(f) for f in z["fileIds"]]
         emb = z["emb"]
@@ -226,7 +226,7 @@ def build(today: date | None = None, log=print) -> dict:
     """算一次分流並落檔。回傳摘要（每日編排與總覽頁都讀它）。"""
     today = today or date.today()
     lab = Labeler.load()
-    pool = pms_review.load_pool()
+    pool = pms_photos.load_pool()
     human = load_reviews()
     decisions = store.active_decisions()
     signals, meta = model_signals(log)
@@ -236,7 +236,7 @@ def build(today: date | None = None, log=print) -> dict:
     ]
     df["humanClass"] = [human.get(f, "") for f in df.fileId]
     df["reviewState"] = [decisions.get(f, {}).get("action", "") for f in df.fileId]
-    df["hasPhoto"] = [pms_review.photo_path(f) is not None for f in df.fileId]
+    df["hasPhoto"] = [pms_photos.photo_path(f) is not None for f in df.fileId]
     for col in ("modelClass", "stageSource", "signal"):
         df[col] = df[col].fillna("")
     routed = route_frame(df, set(meta["modelClasses"]), today)
@@ -348,7 +348,7 @@ def resolve(
     boxes: list | None = None,
 ) -> None:
     """收件匣、標框頁與未來標註平台寫回人審結果——走工作台同一條 decide()，不另開寫入路徑。"""
-    pms_review.decide(
+    pms_decisions.decide(
         file_id,
         action,
         reviewer=reviewer,
@@ -373,7 +373,7 @@ def export_queue(routed: pd.DataFrame, model: str) -> None:
         "generatedAt": datetime.now(UTC).isoformat(timespec="seconds"),
         "model": model,
         "autoConfidence": AUTO_CONFIDENCE,
-        "catalog": sorted(pms_review.catalog()),
+        "catalog": sorted(pms_photos.catalog()),
         "items": [
             {
                 "fileId": str(r["fileId"]),

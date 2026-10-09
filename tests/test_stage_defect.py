@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from core import pms_review as review
+from core import pms_decisions, pms_model, pms_review
 
 CLASSES = ["油漆-批土塗裝", "泥作-打底", "泥作-粉光"]
 
@@ -23,18 +23,18 @@ CLASSES = ["油漆-批土塗裝", "泥作-打底", "泥作-粉光"]
     ],
 )
 def test_title_stage(title, expected):
-    assert review.title_stage(title) == expected
+    assert pms_model.title_stage(title) == expected
 
 
 def test_resolve_stage_uses_title_only_inside_uncertain_group():
     uncertain = np.array([0.05, 0.50, 0.45])  # 群內 0.95，較大者佔 0.53 < STAGE_SHARE
-    assert review.resolve_stage(uncertain, CLASSES, "5F牆面粉光") == ("泥作-粉光", "title")
-    assert review.resolve_stage(uncertain, CLASSES, "5F牆面") == ("泥作-打底", "manual")
+    assert pms_model.resolve_stage(uncertain, CLASSES, "5F牆面粉光") == ("泥作-粉光", "title")
+    assert pms_model.resolve_stage(uncertain, CLASSES, "5F牆面") == ("泥作-打底", "manual")
     sure = np.array([0.05, 0.90, 0.05])  # 階段夠確定 → 不看標題
-    assert review.resolve_stage(sure, CLASSES, "5F牆面粉光") == ("泥作-打底", "model")
+    assert pms_model.resolve_stage(sure, CLASSES, "5F牆面粉光") == ("泥作-打底", "model")
     other = np.array([0.70, 0.16, 0.14])  # 不是泥作群 → 不看標題
-    assert review.resolve_stage(other, CLASSES, "5F牆面粉光") == ("油漆-批土塗裝", "model")
-    assert review.resolve_stage(np.array([0.6, 0.4]), ["油漆-批土塗裝", "泥作-打底"], "粉光") == (
+    assert pms_model.resolve_stage(other, CLASSES, "5F牆面粉光") == ("油漆-批土塗裝", "model")
+    assert pms_model.resolve_stage(np.array([0.6, 0.4]), ["油漆-批土塗裝", "泥作-打底"], "粉光") == (
         "油漆-批土塗裝",
         "model",
     )
@@ -48,10 +48,10 @@ def test_defect_flag_from_title_without_model(pms_env):
     man = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False)
     man.loc[man.fileId == "b", "title"] = "油漆缺失改善"
     man.to_csv(paths.MANIFEST, index=False)
-    df, _ = review.snapshot()
+    df, _ = pms_review.snapshot()
     rows = df.set_index("fileId")
     assert bool(rows.loc["b", "defectFlag"]) and rows.loc["b", "defectSource"] == "title"
     assert not bool(rows.loc["a", "defectFlag"])
-    review.set_defect("b", False, reviewer="tester")  # 人工蓋掉標題旗標
-    df, _ = review.snapshot()
+    pms_decisions.set_defect("b", False, reviewer="tester")  # 人工蓋掉標題旗標
+    df, _ = pms_review.snapshot()
     assert not bool(df.set_index("fileId").loc["b", "defectFlag"])

@@ -8,8 +8,7 @@ import pytest
 import streamlit as st
 from streamlit.testing.v1 import AppTest
 
-from core import paths, routing
-from core import pms_review as review
+from core import paths, pms_decisions, pms_review, routing
 from core import pms_store as store
 from core.labeler import load_reviews
 
@@ -63,13 +62,15 @@ def test_defect_flag_toggle_in_ui_keeps_trade_verdict(pms_env):
     assert not result.exception and not result.error
     assert store.latest("defect")["a"]["defect"] is True
     assert not paths.REVIEW.exists()  # 缺失旗標不寫 review.csv，工種裁決不動
-    df, _ = review.snapshot()
+    df, _ = pms_review.snapshot()
     row = df.set_index("fileId").loc["a"]
     assert bool(row.defectFlag) and row.defectSource == "human"
 
 
 def test_candidate_approval_in_ui_does_not_auto_label(pms_env):
-    key = review.propose_candidate("裝修-消音板", ["u1", "u2"], reviewer="tester", definition="板材孔洞")
+    key = pms_decisions.propose_candidate(
+        "裝修-消音板", ["u1", "u2"], reviewer="tester", definition="板材孔洞"
+    )
     result = app("candidates").run()
     result.text_input(key="pms_reviewer").set_value("ui-tester")
     next(field for field in result.text_area if field.label == "新類定義").set_value("可見消音板")

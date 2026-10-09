@@ -12,9 +12,8 @@ import pandas as pd
 import pytest
 from PIL import Image
 
-from core import paths
+from core import paths, pms_decisions, pms_photos, pms_review
 from core import pms_exchange as exchange
-from core import pms_review as review
 from core import pms_store as store
 from core.labeler import Labeler, load_boxes, load_reviews, orphan_reviews, save_review
 
@@ -34,7 +33,7 @@ def response(ids):
     _, blob = exchange.export_packet(ids)
     with zipfile.ZipFile(io.BytesIO(blob)) as z:
         out = json.loads(z.read("response-template.json"))
-        assert set(json.loads(z.read("catalog.json"))) == set(review.catalog())
+        assert set(json.loads(z.read("catalog.json"))) == set(pms_photos.catalog())
         assert Image.open(io.BytesIO(z.read(f"images/{ids[0]}.jpg"))).format == "JPEG"
     out["model"] = "test-reviewer"
     for row in out["results"]:
@@ -44,7 +43,7 @@ def response(ids):
 
 def test_pms_pool_keeps_unknown_and_small_classes_read_only(pms_env):
     before = sorted(str(p) for p in pms_env["root"].rglob("*") if p.is_file())
-    df, _ = review.snapshot(model())
+    df, _ = pms_review.snapshot(model())
     assert set(df.fileId) == {"a", "b", "c", "d", "u1", "u2"}
     indexed = df.set_index("fileId")
     assert indexed.loc["b", "route"] == "known_untrained"
@@ -52,7 +51,7 @@ def test_pms_pool_keeps_unknown_and_small_classes_read_only(pms_env):
     assert indexed.loc["a", "part"] == "train"
     assert indexed.loc["b", "part"] == "test"
     assert indexed.loc["u1", "part"] == "unseen"
-    assert review.class_inventory(df, model()).set_index("類別").loc["油漆-塗裝", "還差"] == 1
+    assert pms_review.class_inventory(df, model()).set_index("類別").loc["油漆-塗裝", "還差"] == 1
     assert before == sorted(str(p) for p in pms_env["root"].rglob("*") if p.is_file())
 
 
@@ -63,7 +62,9 @@ def test_import_is_suggestion_only_and_idempotent(pms_env):
     assert load_reviews() == {}
     assert store.active_decisions() == {}
     proposal = next(row for row in store.latest("suggestion").values() if row["fileId"] == "a")
-    review.decide("a", "classified", reviewer="tester", label="泥作-打底", proposal_id=proposal["proposalId"])
+    pms_decisions.decide(
+        "a", "classified", reviewer="tester", label="泥作-打底", proposal_id=proposal["proposalId"]
+    )
     assert load_reviews() == {"a": "泥作-打底"}
     assert store.active_decisions()["a"]["proposalId"] == proposal["proposalId"]
 
@@ -112,7 +113,7 @@ def test_proposal_revalidated_when_confirmed(pms_env):
     proposal = next(iter(store.latest("suggestion").values()))
     Image.new("RGB", (60, 40), (20, 220, 20)).save(paths.PHOTOS / "a.jpg")
     with pytest.raises(ValueError):
-        review.decide(
+        pms_decisions.decide(
             "a", "classified", reviewer="tester", label="泥作-打底", proposal_id=proposal["proposalId"]
         )
     assert not paths.REVIEW.exists()
@@ -120,36 +121,38 @@ def test_proposal_revalidated_when_confirmed(pms_env):
 
 def test_manual_override_preserves_boxes_and_pause_can_be_reversed(pms_env):
     save_review("a", "泥作-打底", boxes=[[10, 20, 300, 400]])
-    review.decide("a", "classified", reviewer="tester", label="油漆-塗裝")
+    pms_decisions.decide("a", "classified", reviewer="tester", label="油漆-塗裝")
     assert load_boxes()["a"] == [[10, 20, 300, 400]]
-    review.decide("a", "uncertain", reviewer="tester", reason="材料被遮住")
-    assert "a" not in set(Labeler.load().apply(review.load_pool(), drop_small=False).fileId)
-    assert "a" in set(Labeler.load().apply(review.load_pool(), drop_small=False, overrides={}).fileId)
+    pms_decisions.decide("a", "uncertain", reviewer="tester", reason="材料被遮住")
+    assert "a" not in set(Labeler.load().apply(pms_photos.load_pool(), drop_small=False).fileId)
+    assert "a" in set(Labeler.load().apply(pms_photos.load_pool(), drop_small=False, overrides={}).fileId)
     save_review("a", "泥作-打底")
     assert "a" not in store.blocked_ids()
-    assert "a" in set(Labeler.load().apply(review.load_pool(), drop_small=False).fileId)
+    assert "a" in set(Labeler.load().apply(pms_photos.load_pool(), drop_small=False).fileId)
 
 
 def test_stale_screen_does_not_overwrite_new_decision(pms_env):
-    revision = review.revision("a")
-    review.decide("a", "classified", reviewer="first", label="泥作-打底")
+    revision = pms_decisions.revision("a")
+    pms_decisions.decide("a", "classified", reviewer="first", label="泥作-打底")
     with pytest.raises(ValueError):
-        review.decide("a", "classified", reviewer="second", label="油漆-塗裝", expected_revision=revision)
+        pms_decisions.decide(
+            "a", "classified", reviewer="second", label="油漆-塗裝", expected_revision=revision
+        )
     assert load_reviews()["a"] == "泥作-打底"
 
 
 def test_candidate_approval_defines_class_without_automatic_labels(pms_env):
     original_yaml = paths.LABELS_YAML.read_bytes()
-    key = review.propose_candidate(
+    key = pms_decisions.propose_candidate(
         "裝修-消音板", ["u1", "u2"], reviewer="tester", definition="可見板材與孔洞"
     )
     assert {"u1", "u2"} <= store.blocked_ids()
     seq = store.latest("candidate")[key]["_seq"]
     with pytest.raises(ValueError):
-        review.resolve_candidate(
+        pms_decisions.resolve_candidate(
             key, approve=True, reviewer="tester", definition="板材", excludes="", basis="", expected_seq=seq
         )
-    review.resolve_candidate(
+    pms_decisions.resolve_candidate(
         key,
         approve=True,
         reviewer="tester",
@@ -158,31 +161,31 @@ def test_candidate_approval_defines_class_without_automatic_labels(pms_env):
         basis="現場分類表",
         expected_seq=seq,
     )
-    assert "裝修-消音板" in review.catalog()
+    assert "裝修-消音板" in pms_photos.catalog()
     assert load_reviews() == {}
     assert {"u1", "u2"} <= store.blocked_ids()
     for fid in ("u1", "u2"):
-        review.decide(fid, "classified", reviewer="tester", label="裝修-消音板")
-    assert set(Labeler.load().apply(review.load_pool()).fileId) == {"u1", "u2"}
+        pms_decisions.decide(fid, "classified", reviewer="tester", label="裝修-消音板")
+    assert set(Labeler.load().apply(pms_photos.load_pool()).fileId) == {"u1", "u2"}
     assert not orphan_reviews()
     assert paths.LABELS_YAML.read_bytes() == original_yaml
 
 
 def test_known_untrained_cannot_be_proposed_as_new(pms_env):
     with pytest.raises(ValueError):
-        review.propose_candidate("油漆-塗裝", ["b"], reviewer="tester", definition="油漆")
+        pms_decisions.propose_candidate("油漆-塗裝", ["b"], reviewer="tester", definition="油漆")
     assert not store.latest("candidate")
 
 
 def test_reject_candidate_retains_history(pms_env):
-    key = review.propose_candidate("裝修-消音板", ["u1"], reviewer="tester", definition="候選")
+    key = pms_decisions.propose_candidate("裝修-消音板", ["u1"], reviewer="tester", definition="候選")
     seq = store.latest("candidate")[key]["_seq"]
-    review.propose_candidate("裝修-消音板", ["u2"], reviewer="tester", definition="補照片")
+    pms_decisions.propose_candidate("裝修-消音板", ["u2"], reviewer="tester", definition="補照片")
     with pytest.raises(ValueError):
-        review.resolve_candidate(
+        pms_decisions.resolve_candidate(
             key, approve=False, reviewer="tester", definition="", excludes="", basis="", expected_seq=seq
         )
-    review.resolve_candidate(
+    pms_decisions.resolve_candidate(
         key,
         approve=False,
         reviewer="tester",
@@ -193,19 +196,19 @@ def test_reject_candidate_retains_history(pms_env):
     )
     assert store.latest("candidate")[key]["status"] == "rejected"
     assert len(store.events("candidate")) == 3
-    assert "裝修-消音板" not in review.catalog()
+    assert "裝修-消音板" not in pms_photos.catalog()
 
 
 def test_calibration_uses_raw_rules_not_overridden_answer(pms_env):
-    review.decide("a", "classified", reviewer="tester", label="油漆-塗裝")
-    result = review.calibration()
+    pms_decisions.decide("a", "classified", reviewer="tester", label="油漆-塗裝")
+    result = pms_review.calibration()
     assert result["reviewed"] == 1 and result["ruleMatches"] == 0
     assert result["ruleAccuracy"] == 0
 
 
 def test_discovery_only_groups_active_pms_unknowns(pms_env):
-    df, _ = review.snapshot(model())
-    groups = review.discover(df)
+    df, _ = pms_review.snapshot(model())
+    groups = pms_review.discover(df)
     assert groups and set(groups[0]["fileIds"]) == {"u1", "u2"}
     assert groups[0]["sites"] == 2 and groups[0]["days"] == 2
 
@@ -239,7 +242,7 @@ def test_pipeline_uses_pms_split_and_records_catalog(pms_env, monkeypatch):
     result = pms_workflow.build_split("pms-test")
     assert result["encoder"] == registry.DEFAULT_ENCODER
     assert calls[-1] == {"name": "pms-test", "log": calls[-1]["log"]}  # 主線切分沒有任何 legacy 選項
-    assert result["pmsCatalogVersion"] == review.catalog_version()
+    assert result["pmsCatalogVersion"] == pms_photos.catalog_version()
     assert not (paths.SPLITS / "CURRENT").exists()
     with pytest.raises(ValueError):
         pms_workflow.check_new_run("pms-test")

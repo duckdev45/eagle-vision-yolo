@@ -11,8 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from core import model_registry as registry
-from core import paths, routing
-from core import pms_review as review
+from core import paths, pms_decisions, pms_photos, routing
 
 from .common import reviewer_input, txt
 from .data import labeled
@@ -31,7 +30,7 @@ def _queue() -> pd.DataFrame:
     items = routing.queue_items()
     if items.empty:
         return items
-    pool = review.load_pool()[["fileId", "title", "constrName", "chipsOn"]]
+    pool = pms_photos.load_pool()[["fileId", "title", "constrName", "chipsOn"]]
     refs = labeled()
     refs = refs[[c for c in _REF_COLUMNS if c in refs]] if len(refs) else pd.DataFrame(columns=["fileId"])
     q = items.merge(pool, on="fileId", how="left").merge(refs, on="fileId", how="left")
@@ -59,7 +58,7 @@ def review_queue() -> None:
     if q.empty:
         st.success("佇列是空的（或還沒分流：收件匣那頁可以立即分流）。")
         return
-    classes = sorted(review.catalog())
+    classes = sorted(pms_photos.catalog())
 
     c1, c3, c4 = st.columns([4, 2, 2])
     present = [w for w in routing.REASONS if q.reason.str.contains(w, regex=False).any()]
@@ -85,7 +84,7 @@ def review_queue() -> None:
                 _review_card(r, classes, reviewer)
                 if proposal := suggestions.get(r.fileId):
                     revision_key = f"pms_revision:queue:{r.fileId}"
-                    expected = st.session_state.setdefault(revision_key, review.revision(r.fileId))
+                    expected = st.session_state.setdefault(revision_key, pms_decisions.revision(r.fileId))
                     if suggestion_card(
                         proposal, reviewer, key=f"pms_queue_accept_{r.fileId}", expected_revision=expected
                     ):

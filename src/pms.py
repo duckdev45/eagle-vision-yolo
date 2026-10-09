@@ -7,8 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+from core import pms_decisions, pms_photos, pms_review
 from core import pms_exchange as exchange
-from core import pms_review as review
 from core import pms_store as store
 
 
@@ -43,13 +43,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = None
         if args.command == "status":
-            df, model = review.snapshot()
+            df, model = pms_review.snapshot()
             result = {
                 "source": "pms",
                 "photoSource": "WORK_ITEM",
                 "photos": len(df),
                 "model": model["name"],
-                "catalogClasses": len(review.catalog()),
+                "catalogClasses": len(pms_photos.catalog()),
                 "modelClasses": len(model["classes"]),
                 "states": df.reviewState.value_counts().to_dict(),
                 "routes": df.route.value_counts().to_dict(),
@@ -57,12 +57,12 @@ def main(argv: list[str] | None = None) -> int:
                 "warning": model["warning"],
             }
         elif args.command == "calibration":
-            result = review.calibration()
+            result = pms_review.calibration()
         elif args.command == "candidates":
-            df, _ = review.snapshot()
+            df, _ = pms_review.snapshot()
             result = {
                 "registered": list(store.latest("candidate").values()),
-                "discovery": review.discover(df),
+                "discovery": pms_review.discover(df),
             }
         elif args.command == "export":
             if args.out.exists():
@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.ids:
                 ids = [fid.strip() for fid in args.ids.split(",") if fid.strip()]
             else:
-                df, _ = review.snapshot()
+                df, _ = pms_review.snapshot()
                 ids = (
                     df[df.needsReview.astype(bool)]
                     .sort_values("reportDate", ascending=False)
@@ -91,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             }
         elif args.command == "decide":
-            review.decide(
+            pms_decisions.decide(
                 args.id,
                 args.action,
                 label=args.label,
@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.ids:
                 ids = [fid.strip() for fid in args.ids.split(",") if fid.strip()]
             else:
-                df, _ = review.snapshot()
+                df, _ = pms_review.snapshot()
                 ids = (
                     df[df.needsReview.astype(bool)]
                     .sort_values("reportDate", ascending=False)

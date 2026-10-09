@@ -1,6 +1,6 @@
 """工項融合與打底／粉光分層判斷；純 numpy，不讀 manifest。
 
-邏輯與訓練端 core.evaluation_metrics.fuse_work_items、core.pms_review.resolve_stage 相同
+邏輯與訓練端 core.evaluation_metrics.fuse_work_items、core.pms_model.resolve_stage 相同
 （tests/test_service_fusion_parity.py 逐一比對）。服務是獨立套件、Docker 只帶 vision_api，
 所以在這裡保留一份，門檻由模型包 metadata 帶入，這裡只是預設值。
 """

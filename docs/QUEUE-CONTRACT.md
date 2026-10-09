@@ -52,7 +52,7 @@ routing.resolve(file_id, reviewer="…", action="uncertain", reason="看不出�
 routing.resolve(file_id, reviewer="…", action="excluded", reason="不該分類的原因")
 ```
 
-它走工作台同一條 `pms_review.decide()`：驗證類名在分類表裡、要求確認者、暫緩／排除要寫原因，
+它走工作台同一條 `pms_decisions.decide()`：驗證類名在分類表裡、要求確認者、暫緩／排除要寫原因，
 同時寫 `data/review.csv` 與 `data/pms_review.sqlite3` 的事件紀錄。**API 層不得另開寫入路徑。**
 寫回後該照片立刻離開收件匣，不必等下次分流。
 

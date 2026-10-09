@@ -29,7 +29,7 @@ PMS 同步 → manifest + 原照片 → 工種工作台
                             明確切換版本
 ```
 
-`core/pms_review.py` 組裝有效 PMS **施作項目**母體：經 `core/pms_source.work_items()` 只保留 `source=WORK_ITEM`，再排除 inactive、非 PMS dataset 與既有壞日報條件。`WORKFORCE` 是出工紀錄，公工／打石工等 `tradeName` 不是施作項目標籤；此處依來源欄位篩選，不用職稱或標題關鍵字排除。來源不明的列不進分類；整份 manifest 缺 `source` 時要求重新同步，不猜測。
+`core/pms_photos.py` 組裝有效 PMS **施作項目**母體：經 `core/pms_source.work_items()` 只保留 `source=WORK_ITEM`，再排除 inactive、非 PMS dataset 與既有壞日報條件。`WORKFORCE` 是出工紀錄，公工／打石工等 `tradeName` 不是施作項目標籤；此處依來源欄位篩選，不用職稱或標題關鍵字排除。來源不明的列不進分類；整份 manifest 缺 `source` 時要求重新同步，不猜測。
 
 工作台、複核佇列、PMS 候選挖掘與訓練母體共用這個邊界；原始出工照片、manifest 與既有裁決保留。只有 `WORK_ITEM` 範圍內的空標題、junk 標題、fallback、小樣本類別留在工作台供看圖。是否能訓練由標籤與人工狀態另外決定。
 
@@ -109,7 +109,10 @@ uv run src/pms.py calibration
 |---|---|
 | `core/pms_store.py` | SQLite 追加事件、最後狀態及候選版本檢查 |
 | `core/pms_source.py` | PMS 施作項目 WORK_ITEM 共用來源篩選 |
-| `core/pms_review.py` | PMS 照片快照、人工裁決、分類表與候選 |
+| `core/pms_photos.py` | 有效施作照母體、分類表與版本、照片檔 |
+| `core/pms_model.py` | 本機探針預測、泥作打底／粉光分層、缺失旗標 |
+| `core/pms_decisions.py` | 人工裁決、缺失旗標、新類候選的寫回（唯一入口） |
+| `core/pms_review.py` | 工作台檢視：逐張快照、類別盤點、新類線索、規則校準 |
 | `core/pms_exchange.py` | 審閱包與建議回覆驗證 |
 | `core/pms_vision.py` | OpenAI 圖片與標題請求、分類結果、快取與失敗處理 |
 | `src/ui/pms_ai.py` | 照片頁與複核佇列共用的 AI 分類／人工採用操作 |

@@ -11,8 +11,7 @@ import pandas as pd
 import pytest
 from PIL import Image
 
-from core import paths
-from core import pms_review as review
+from core import paths, pms_decisions, pms_photos
 from core import pms_store as store
 from core import pms_vision as vision
 from core.labeler import load_reviews
@@ -66,7 +65,7 @@ def test_request_contains_actual_image_title_catalog_and_no_human_truth(configur
         assert context["context"]["title"] == "打底施作"
         assert context["context"]["source"] == "WORK_ITEM"
         assert "humanClass" not in context["context"] and "modelClass" not in context["context"]
-        assert set(context["catalog"]) == set(review.catalog())
+        assert set(context["catalog"]) == set(pms_photos.catalog())
         assert body["store"] is False
         assert body["text"]["format"]["strict"] is True
         return httpx.Response(200, json=api_body())
@@ -84,7 +83,7 @@ def test_request_contains_actual_image_title_catalog_and_no_human_truth(configur
     metadata = next(iter(store.latest("vision_cache").values()))
     assert metadata["responseId"] == "resp-test"
     assert "test-secret" not in json.dumps(store.events("vision_cache"))
-    review.decide(
+    pms_decisions.decide(
         "a", "classified", reviewer="tester", label=suggestion["label"], proposal_id=suggestion["proposalId"]
     )
     assert load_reviews() == {"a": "泥作-打底"}

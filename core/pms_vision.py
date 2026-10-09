@@ -17,9 +17,8 @@ from collections.abc import Callable
 import httpx
 from dotenv import dotenv_values
 
-from core import paths
+from core import paths, pms_photos
 from core import pms_exchange as exchange
-from core import pms_review as review
 from core import pms_store as store
 
 ENDPOINT = "https://api.openai.com/v1/responses"
@@ -121,7 +120,7 @@ def classify(
     """明確按鈕／CLI 觸發；整批先驗來源，單張失敗保留先前成功，重跑可用快取。"""
     if not file_ids or len(file_ids) > MAX_BATCH:
         raise ValueError(f"每批需選取 1 至 {MAX_BATCH} 張照片。")
-    selected = review._photos(file_ids)
+    selected = pms_photos.require_photos(file_ids)
     api_key, configured_model = _settings()
     model = (model or configured_model).strip()
     if not api_key or not model:

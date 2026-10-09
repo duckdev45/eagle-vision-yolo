@@ -10,8 +10,7 @@ from datetime import datetime
 
 import streamlit as st
 
-from core import pms_review as review
-from core import routing
+from core import pms_photos, routing
 
 from .common import reviewer_input, run_step
 
@@ -77,13 +76,13 @@ def inbox() -> None:
     idx = min(st.session_state.get(_IDX, 0), len(items) - 1)
     row = items.iloc[idx].to_dict()
     fid = str(row["fileId"])
-    pool = review.load_pool().set_index("fileId")
+    pool = pms_photos.load_pool().set_index("fileId")
     title = str(pool.title.get(fid, "")) if fid in pool.index else ""
 
     left, right = st.columns([3, 2])
     with left:
         try:
-            st.image(review.photo_bytes(fid), width="stretch")
+            st.image(pms_photos.photo_bytes(fid), width="stretch")
         except (ValueError, OSError) as exc:
             st.warning(f"無法讀取照片：{exc}")
     with right:
@@ -115,7 +114,9 @@ def inbox() -> None:
                 f"✓ {label}（{source}）", key=f"inbox_pick_{i}", type="primary" if i == 0 else "secondary"
             ):
                 save(label)
-        other = st.selectbox("都不是 → 選正確類別", ["", *sorted(review.catalog())], key=f"inbox_other_{fid}")
+        other = st.selectbox(
+            "都不是 → 選正確類別", ["", *sorted(pms_photos.catalog())], key=f"inbox_other_{fid}"
+        )
         if other and st.button(f"✓ 存為 {other}", key="inbox_other_save"):
             save(other)
         why = st.text_input("看不出來／不該分類的原因", key=f"inbox_why_{fid}")

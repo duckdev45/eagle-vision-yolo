@@ -56,3 +56,41 @@ def test_model_artifact_names_are_spelled_only_in_registry():
         if pattern.search(line)
     ]
     assert not offenders, f"自己拼模型檔名了，改用 core/model_registry.py：{offenders}"
+
+
+def _core_modules_imported(path: Path) -> set[str]:
+    """`from core import x`、`from core.x import y`、`import core.x` → {"x", ...}。"""
+    out: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.ImportFrom) and node.module == "core":
+            out.update(a.name for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and (node.module or "").startswith("core."):
+            out.add(node.module.split(".")[1])
+        elif isinstance(node, ast.Import):
+            out.update(a.name.split(".")[1] for a in node.names if a.name.startswith("core."))
+    return out
+
+
+def test_workbench_view_is_a_leaf_of_core():
+    """pms_review 是工作台檢視（組表給畫面），可以依賴 routing；反過來任何 core 模組 import 它
+    就會回到 2026-10-09 以前的循環（routing ⇄ pms_review 要靠函式內延遲 import 撐著）。"""
+    offenders = [
+        p.name
+        for p in (ROOT / "core").glob("*.py")
+        if p.name != "pms_review.py" and "pms_review" in _core_modules_imported(p)
+    ]
+    assert not offenders, f"core 模組不得 import 工作台檢視 pms_review：{offenders}"
+
+
+def test_human_verdicts_are_written_only_through_pms_decisions():
+    """review.csv 的寫入（save_review）只准出現在 core/pms_decisions.py——收件匣、工作台、標框頁、
+    CLI、未來標註平台都經 decide()，驗證（母體、確認者、類名）才不會有漏網的入口。"""
+    offenders = [
+        f"{p.relative_to(ROOT)}:{n}"
+        for top in ("core", "src", "pipeline")
+        for p in (ROOT / top).rglob("*.py")
+        if p.name not in {"pms_decisions.py", "labeler.py"}
+        for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
+        if re.search(r"\bsave_review\(", line)
+    ]
+    assert not offenders, offenders

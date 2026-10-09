@@ -20,7 +20,8 @@ import numpy as np
 import features
 from core import model_registry as registry
 from core.evaluation_metrics import REVIEW_CONFIDENCE
-from core.pms_review import STAGE_CLASSES, STAGE_GROUP, STAGE_SHARE, catalog_version
+from core.pms_model import STAGE_CLASSES, STAGE_GROUP, STAGE_SHARE
+from core.pms_photos import catalog_version
 
 
 def _sha256(path: Path) -> str:

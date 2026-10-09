@@ -8,9 +8,8 @@ import pandas as pd
 import streamlit as st
 
 from core import model_registry as registry
-from core import paths
+from core import paths, pms_decisions, pms_model, pms_photos, pms_review
 from core import pms_exchange as exchange
-from core import pms_review as review
 from core import pms_store as store
 
 from .common import reviewer_input
@@ -19,7 +18,7 @@ from .pms_ai import ai_panel, suggestion_card
 
 @st.cache_data(show_spinner=False)
 def _model(stamp: tuple) -> dict:
-    return review.local_model()
+    return pms_model.local_model()
 
 
 def _snapshot():
@@ -33,7 +32,7 @@ def _snapshot():
     stamp = tuple(
         (str(p), p.stat().st_mtime_ns, p.stat().st_size) if p.exists() else (str(p), 0, 0) for p in files
     )
-    return review.snapshot(_model(stamp))
+    return pms_review.snapshot(_model(stamp))
 
 
 def _refresh(message: str = "") -> None:
@@ -47,7 +46,7 @@ def _refresh(message: str = "") -> None:
 
 def _image(fid: str) -> None:
     try:
-        st.image(review.photo_bytes(fid), width="stretch")
+        st.image(pms_photos.photo_bytes(fid), width="stretch")
     except (OSError, ValueError) as exc:
         st.warning(f"圖片暫時無法讀取：{exc}")
 
@@ -102,7 +101,7 @@ def _candidate_form(ids: list[str], reviewer: str, key: str, proposal: dict | No
         submit = st.form_submit_button("提出新工種候選", disabled=not ids)
     if submit:
         try:
-            review.propose_candidate(
+            pms_decisions.propose_candidate(
                 label,
                 ids,
                 reviewer=reviewer,
@@ -121,7 +120,9 @@ def _photo_card(row: dict, reviewer: str, known: list[str]) -> None:
     st.markdown(f"**{row['title'] or '無標題照片'}**")
     st.caption(f"{row['reportDate']} · {row['constrName'] or row['constrId']} · {fid}")
     _image(fid)
-    st.caption(f"{review.STATES[row['reviewState']]} · {review.ROUTES[row['route']]} · {row['part'].upper()}")
+    st.caption(
+        f"{pms_review.STATES[row['reviewState']]} · {pms_review.ROUTES[row['route']]} · {row['part'].upper()}"
+    )
     st.write(f"標題規則：{row['ruleClass'] or '無分類'}")
     st.write(f"人工確認：{row['humanClass'] or '尚未確認'}")
     model = row["modelClass"] or "尚無預測"
@@ -130,7 +131,7 @@ def _photo_card(row: dict, reviewer: str, known: list[str]) -> None:
     st.write(f"照片模型：{model}")
     if row.get("stageDecision") == "title":
         st.caption("打底／粉光階段由標題決定（照片模型只確定是泥作打底/粉光群）")
-    source = review.DEFECT_SOURCES.get(row.get("defectSource") or "", "")
+    source = pms_model.DEFECT_SOURCES.get(row.get("defectSource") or "", "")
     st.write(f"缺失旗標：{'是' if row.get('defectFlag') else '否'}" + (f"（{source}）" if source else ""))
     if row["reviewReason"]:
         st.caption(row["reviewReason"])
@@ -138,14 +139,14 @@ def _photo_card(row: dict, reviewer: str, known: list[str]) -> None:
         defect = st.checkbox("這張是缺失改善照（與工種分開記錄）", value=bool(row.get("defectFlag")))
         if st.form_submit_button("儲存缺失旗標"):
             try:
-                review.set_defect(fid, defect, reviewer=reviewer)
+                pms_decisions.set_defect(fid, defect, reviewer=reviewer)
                 _refresh("已保存缺失旗標；工種裁決不受影響。")
             except (ValueError, OSError) as exc:
                 st.error(str(exc))
     with st.expander("日報參考資訊"):
         st.write({"標題": row["title"], "查驗重點": row["chipsOn"], "前端工種": row["specKey"]})
     rev_key = f"pms_revision:{fid}"
-    expected = st.session_state.setdefault(rev_key, review.revision(fid))
+    expected = st.session_state.setdefault(rev_key, pms_decisions.revision(fid))
     proposal = row["suggestion"]
     if suggestion_card(proposal, reviewer, key=f"pms_accept_{fid}", expected_revision=expected):
         _refresh("已保存照片分類與 AI 建議來源。")
@@ -166,7 +167,7 @@ def _photo_card(row: dict, reviewer: str, known: list[str]) -> None:
         submitted = st.form_submit_button("儲存判斷")
     if submitted:
         try:
-            review.decide(
+            pms_decisions.decide(
                 fid, action, reviewer=reviewer, label=label or "", reason=reason, expected_revision=expected
             )
             _refresh("已保存判斷；下次訓練會使用更新後的標籤與排除狀態。")
@@ -189,7 +190,7 @@ def _photos_page(df: pd.DataFrame, reviewer: str) -> None:
             "尚無分類",
             "模型尚未涵蓋",
             "缺失旗標",
-            *[v for k, v in review.STATES.items() if k != "pending"],
+            *[v for k, v in pms_review.STATES.items() if k != "pending"],
         ],
         key="pms_photo_filter",
     )
@@ -204,7 +205,7 @@ def _photos_page(df: pd.DataFrame, reviewer: str) -> None:
     elif kind == "缺失旗標":
         view = view[view.defectFlag.astype(bool)]
     elif kind != "全部":
-        state = next(key for key, label in review.STATES.items() if label == kind)
+        state = next(key for key, label in pms_review.STATES.items() if label == kind)
         view = view[view.reviewState == state]
     if site != "全部":
         view = view[view.constrName == site]
@@ -229,14 +230,14 @@ def _photos_page(df: pd.DataFrame, reviewer: str) -> None:
     for offset in range(0, len(rows), 2):
         for col, row in zip(st.columns(2), rows[offset : offset + 2]):
             with col, st.container(border=True):
-                _photo_card(row, reviewer, sorted(review.catalog()))
+                _photo_card(row, reviewer, sorted(pms_photos.catalog()))
 
 
 def _candidates_page(df: pd.DataFrame, model: dict, reviewer: str) -> None:
     st.caption("先檢查完整分類表；既有類別缺樣本或模型尚未涵蓋時，直接分類並累積資料即可。")
     with st.expander("完整分類表與待訓練類別"):
-        st.dataframe(review.class_inventory(df, model), hide_index=True, width="stretch")
-    groups = review.discover(df)
+        st.dataframe(pms_review.class_inventory(df, model), hide_index=True, width="stretch")
+    groups = pms_review.discover(df)
     chosen = []
     if groups:
         st.markdown("**未知照片的文字群組提示**")
@@ -294,7 +295,7 @@ def _candidates_page(df: pd.DataFrame, model: dict, reviewer: str) -> None:
             reject = st.form_submit_button("不開新類，保留紀錄")
         if approve or reject:
             try:
-                review.resolve_candidate(
+                pms_decisions.resolve_candidate(
                     key,
                     approve=approve,
                     reviewer=reviewer,
@@ -328,16 +329,16 @@ def workbench(section: str = "photos") -> None:
     c.metric("人工確認", int((df.reviewState == "classified").sum()))
     d.metric("尚無分類", int((df.route == "unknown").sum()))
     st.caption(
-        f"目前模型 {model['name']} · 完整分類表 {len(review.catalog())} 類 · 模型涵蓋 {len(model['classes'])} 類"
+        f"目前模型 {model['name']} · 完整分類表 {len(pms_photos.catalog())} 類 · 模型涵蓋 {len(model['classes'])} 類"
     )
     st.caption("本頁只收 PMS 施作項目（WORK_ITEM）；出工紀錄照片保留於原始資料，不列入工種分類與新類候選。")
     if st.button("重新整理資料", key="pms_refresh"):
         _refresh()
     if section == "overview":
-        st.dataframe(review.class_inventory(df, model), hide_index=True, width="stretch")
+        st.dataframe(pms_review.class_inventory(df, model), hide_index=True, width="stretch")
         st.caption("有效標籤包含尚未複核的標題規則結果；樣本達門檻僅表示可進下輪訓練，模型切換需另行確認。")
         with st.expander("已裁照片與純標題規則的一致度"):
-            st.json(review.calibration())
+            st.json(pms_review.calibration())
         return
     if df.empty:
         st.info("尚無有效 PMS 照片，請先到同步頁抓取日報。")

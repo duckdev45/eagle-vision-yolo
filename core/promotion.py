@@ -34,7 +34,7 @@ from typing import Any
 import numpy as np
 
 from core import model_registry as registry
-from core import paths, pms_review
+from core import paths, pms_model, pms_photos
 from core.evaluation_metrics import fuse_work_items
 from core.labeler import load_reviews
 
@@ -51,7 +51,7 @@ def _load(name: str) -> tuple[dict, Any]:
 def _predict(clf, emb, ids: list[str], titles: dict[str, str], keys: dict[str, str]) -> list[str]:
     classes = [str(c) for c in clf.classes_]
     proba = fuse_work_items(clf.predict_proba(emb), [keys.get(f, "") for f in ids])
-    return [pms_review.resolve_stage(p, classes, titles.get(f, ""))[0] for p, f in zip(proba, ids)]
+    return [pms_model.resolve_stage(p, classes, titles.get(f, ""))[0] for p, f in zip(proba, ids)]
 
 
 def score(y_true: list[str], y_pred: list[str]) -> dict:
@@ -77,9 +77,9 @@ def exam(candidate: str, baseline: str) -> dict:
 
     cand_sp, cand_clf = _load(candidate)
     base_sp, base_clf = _load(baseline)
-    pool = pms_review.load_pool()
+    pool = pms_photos.load_pool()
     titles = dict(zip(pool.fileId, pool.title))
-    keys = pms_review.work_item_keys(pool)
+    keys = pms_photos.work_item_keys(pool)
     base_classes = {str(c) for c in base_clf.classes_}
     labels = cand_sp["labels"]
     paper = [
@@ -161,7 +161,7 @@ def promote(
         record.update(promoted=False, reasons=["候選版就是現行版"])
     else:
         result = exam(candidate, baseline)
-        catalog_ok = registry.load_split(candidate).get("pmsCatalogVersion") == pms_review.catalog_version()
+        catalog_ok = registry.load_split(candidate).get("pmsCatalogVersion") == pms_photos.catalog_version()
         ok, reasons = verdict(result, catalog_ok=catalog_ok)
         record.update(promoted=ok, reasons=reasons, exam=result)
         if ok:

@@ -42,7 +42,8 @@
 | `core/contractdata.py` | **Contract Service** | 逐案合約工作約定：付款節點、罰則、驗收數值、QS 交叉引用。 |
 | `core/labeler.py` | **Rule Engine** | `labels.yaml` 的規則匹配（順序即優先權），把日報標題歸到工程分類樹節點。 |
 | `core/evaluation_metrics.py` | **Scoring Service** | 工項融合（同日報同標題的兄弟照一起看）與信心門檻；`service/` 有平行實作，由 `tests/test_service_fusion_parity.py` 守住不漂移。 |
-| `core/pms_source.py` / `pms_store.py` / `pms_exchange.py` / `pms_review.py` / `pms_vision.py` | **PMS Data Services** | 照片來源、本機事件 SQLite、審閱包匯出匯入、裁決與候選、VLM 看圖建議。 |
+| `core/pms_source.py` / `pms_store.py` / `pms_exchange.py` / `pms_vision.py` | **PMS Data Services** | 照片來源、本機事件 SQLite、審閱包匯出匯入、VLM 看圖建議。 |
+| `core/pms_photos.py` / `pms_model.py` / `pms_decisions.py` / `pms_review.py` | **PMS Review Services** | 母體與分類表（只讀）／模型判讀（泥作分層、缺失旗標、本機預測）／**人審寫回唯一入口**（`save_review` 只准出現在這裡）／工作台檢視（快照、盤點；core 其他模組不得 import 它）。後兩條由 `tests/test_architecture.py` 擋。 |
 | `core/routing.py` / `core/promotion.py` | **Daily Routing & Promotion** | 每日分流（自動確認／抽查／人工佇列／隔離）與公平考卷自動切換；`src/daily.py` 編排。**「要不要人看」只有這一份**：收件匣、進階複核、工作台、`make pms-status`、`make queue` 都讀它。 |
 | `core/model_registry.py` | **Model Registry** | 哪一版上線（`CURRENT`）、它用哪個編碼器、split／探針／特徵檔名怎麼拼、讀特徵與探針——只寫在這一處；`tests/test_architecture.py` 擋 core 反向依賴腳本（零例外）與自己拼檔名。 |
 | `core/paths.py` | **Path Constants** | 所有資料路徑（`from core import paths`）；測試 monkeypatch 這個 module 就能把寫入全部導到暫存目錄。 |

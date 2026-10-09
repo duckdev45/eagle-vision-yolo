@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from core import model_registry as registry
-from core import paths, pms_review
+from core import paths, pms_model
 
 
 class HalfProbe:
@@ -45,6 +45,6 @@ def test_workbench_scores_use_split_encoder_and_work_item_fusion(pms_env):
         fileIds=np.array(["a", "b", "u1"]),
         emb=np.array([[1.0], [-1.0], [0.5]]),
     )
-    scores = pms_review.local_model()["scores"]
+    scores = pms_model.local_model()["scores"]
     assert scores["a"][0] == "油漆-塗裝"  # 兄弟照 b 把 a 拉到油漆
     assert scores["u1"][0] == "泥作-打底" and round(scores["u1"][1], 2) == 0.51  # 單張工項不融合
