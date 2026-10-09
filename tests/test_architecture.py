@@ -94,3 +94,16 @@ def test_human_verdicts_are_written_only_through_pms_decisions():
         if re.search(r"\bsave_review\(", line)
     ]
     assert not offenders, offenders
+
+
+def test_ui_never_writes_files():
+    """src/app.py 與 src/ui/* 只做 UI（AGENTS 鐵則 2）：寫檔一律經 core。2026-10-09 以前「標籤規則」頁
+    直接覆寫 labels.yaml，繞過 tests/test_labels_yaml.py 的順序契約，存錯一條隔天排程就照錯規則重訓。"""
+    pattern = re.compile(r"\.write_text\(|\.write_bytes\(|\.to_csv\(|open\([^)]*['\"][wa]")
+    offenders = [
+        f"{p.relative_to(ROOT)}:{n}"
+        for p in [ROOT / "src" / "app.py", *(ROOT / "src" / "ui").glob("*.py")]
+        for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
+        if pattern.search(line)
+    ]
+    assert not offenders, f"UI 直接寫檔，改走 core：{offenders}"

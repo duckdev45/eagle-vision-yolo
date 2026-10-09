@@ -84,15 +84,13 @@ def pms_page(section: str) -> None:
 
     if section == "標籤規則":
         st.subheader("labels.yaml")
+        # 唯讀（2026-10-09）：以前這裡能直接存檔，繞過 tests/test_labels_yaml.py 的順序契約，
+        # 存錯一條，隔天的每日排程就照錯的規則分流、重訓。改規則一律回 repo 改並跑 make test。
         st.caption(
-            "順序即優先權，第一個命中者勝。這裡存檔不會跑 tests/test_labels_yaml.py 的順序契約——"
-            "正式改規則請在 repo 裡改並跑 make test。"
+            "唯讀。順序即優先權，第一個命中者勝。改規則請在 repo 裡編輯 labels.yaml 並跑 "
+            "`make test`（順序契約在 tests/test_labels_yaml.py）。"
         )
-        text = st.text_area("規則", paths.LABELS_YAML.read_text(), height=320)
-        if st.button("💾 存檔並重算"):
-            paths.LABELS_YAML.write_text(text)
-            st.cache_data.clear()
-            st.rerun()
+        st.code(paths.LABELS_YAML.read_text(), language="yaml", height=320)
         probe = st.text_input("試打一個標題", "13F外牆打底粉光")
         if probe:
             st.write("→", Labeler.load().label(probe) or "（排除）")
