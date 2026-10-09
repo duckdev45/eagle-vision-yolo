@@ -24,6 +24,8 @@ make lint        # ruff check + format --check（只查不改）
 make fmt         # ruff 自動修正，改動自行 review
 make pms-app     # PMS 工種操作台（現行主線）
 make pms-status  # 照片分類與待複核盤點（唯讀）
+make daily       # 每日編排：分流→重訓→公平考卷過關自動切換（hermes cron 每天跑）
+make route       # 只重算收件匣分流
 make help        # 其餘 target 說明
 ```
 
@@ -48,6 +50,8 @@ make help        # 其餘 target 說明
 - 畫面近乎相同的照片不可跨 train/test（日報按 `constrId × reportDate` 整天切）。
 - 每個實驗都要有對照組；判斷看分組交叉驗證，不看單一數字。
 - YOLO 訓練集**只收人審框（`HUMAN_REFINED`）**，純 `AI_GUESS` 一律排除（`docs/ROADMAP.md`）。
+- 每日分流（`core/routing.py`）的**自動確認不得寫入 `review.csv`**；模型訊號對 split 內照片必須用分組 out-of-fold，
+  不能用背過它的上線模型（`tests/test_routing.py`）。自動切換只能經 `core/promotion.py` 的公平考卷。
 
 ## 改 `labels.yaml` 的規則
 

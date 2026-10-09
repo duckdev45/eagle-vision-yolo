@@ -35,7 +35,7 @@
 
 | Module Path | Responsibility | Key Function/Purpose |
 | :--- | :--- | :--- |
-| `src/app.py` | **Presentation Shell** | **UI Layer Only.** 最上層選系統（PMS 日報 / QMS 稽核 / 規範庫），分頁實作在 `src/ui/*`。任何業務邏輯均不在此計算。 |
+| `src/app.py` | **Presentation Shell** | **UI Layer Only.** 主導覽：收件匣／總覽／報告／進階（QMS 稽核、規範庫在進階裡），分頁實作在 `src/ui/*`。任何業務邏輯均不在此計算。 |
 | `pipeline/pms_workflow.py` | **Workflow Orchestrator** | PMS 訓練鏈的步驟定義與前置檢查（版本名、切分、特徵齊備、catalog 版本）。CLI 與操作台共用。 |
 | `core/qs_data.py` | **QS Knowledge Service** | 載入與查詢公司 ISO（QS）品質標準；A~E 工具分派、請款靶、合約相依項。 |
 | `core/contractdata.py` | **Contract Service** | 逐案合約工作約定：付款節點、罰則、驗收數值、QS 交叉引用。 |
@@ -43,6 +43,7 @@
 | `core/review_utils.py` | **Calculation Service** | 複核佇列分層（tier）與孤兒鄰居參考，CLI `src/review.py` 與操作台共用同一份。 |
 | `core/evaluation_metrics.py` | **Scoring Service** | 工項融合（同日報同標題的兄弟照一起看）與信心門檻；`service/` 有平行實作，由 `tests/test_service_fusion_parity.py` 守住不漂移。 |
 | `core/pms_source.py` / `pms_store.py` / `pms_exchange.py` / `pms_review.py` / `pms_vision.py` | **PMS Data Services** | 照片來源、本機事件 SQLite、審閱包匯出匯入、裁決與候選、VLM 看圖建議。 |
+| `core/routing.py` / `core/promotion.py` | **Daily Routing & Promotion** | 每日分流（自動確認／抽查／人工佇列／隔離）與公平考卷自動切換；`src/daily.py` 編排。 |
 | `core/defects.py` | **Defect Box Service** | 缺失框資料層（HUMAN 層框才進表，AI_GUESS 不寫）。 |
 | `src/*.py` | **Pipeline Scripts** | 一步一支、可單跑：`sync` → `prepare` → `features` → `split` → `train` → `evaluate` → `explain` → `journal`。 |
 | `src/export_label_pack.py` | **Data Boundary Enforcer** | 去識別化判準包匯出（`make label-pack`）。白名單在 `docs/DATA-BOUNDARY.md`，欄位型別不符就整份拒匯——紅線由程式擋，不靠人眼。 |
@@ -54,13 +55,14 @@
 
 ### 1. 數據輸入流程 (Data Ingestion & Sync)
 *   **目標:** 確保所有歷史/即時照片都能被系統識別。
-*   **路徑:** `src/app.py` ①同步 $\to$ `src/sync.py`（或 `make sync`）。
+*   **路徑:** `make daily` 每天自動跑；手動走操作台「進階 → 同步與重訓」或 `make sync`（`src/sync.py`）。
 *   **重點:** 此步驟負責更新 `derived/` 屬性文件（如 `manifest.csv`, `report_index.csv`），是所有後續計算的入場憑證。
 
 ### 2. 核心流程 (The Full QC Loop)
 *   **目標:** 從原始照片流到最終的仲裁分數，必須嚴格按序執行。
 *   **流程:** `make retrain` = `data`（sync → prepare → features）$\rightarrow$ `model`（split → train → evaluate → explain → journal）。PMS 專用版同一條鏈走 `pipeline/pms_workflow.py`（`make pms-retrain`）。
 *   **核心挑戰:** 每一階段的輸出，都必須作為下一階段的**唯一輸入**；切換線上模型是獨立動作（`make use`），不是 `make model` 的副作用。
+*   **每日無人值守（2026-10-09）:** `make daily`（`src/daily.py`）= 同步 → 特徵 → 分流（`core/routing.py`）→ 新資料夠多才重訓 → 公平考卷（`core/promotion.py`）過關才自動切換。切換仍不是重訓的副作用：它是考卷的結果，每次都記在 `data/promotion-log.jsonl`。
 
 ### 3. 關鍵機制說明 (Critical Mechanisms)
 
@@ -81,6 +83,8 @@
 make sync                         # 運行日報同步和照片下載（只讀，不觸發重訓）
 make retrain SPLIT=vN             # data（sync→prepare→features）→ model（split→train→evaluate→explain→journal）
 make use SPLIT=vN                 # 看過分數後，才把操作台切到這一版
+make daily                        # 每日編排（排程跑這個）：分流 → 夠多新資料就重訓 → 考卷過關自動切換
+make route                        # 只重算收件匣分流
 
 # Specialized Tasks
 make newclass                     # 發現新的工種 / 規則空缺 (用於擴展規則庫)

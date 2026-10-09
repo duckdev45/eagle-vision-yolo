@@ -5,6 +5,10 @@
 > 比較，造成循環比較。现行工作台的 `core/pms_review.py:calibration()` 直接計算
 > `Labeler.label(title)`，不套人工覆寫。本文舊數字與自動寫入提案僅保留作歷史；
 > 現行流程先保存 AI 建議，再由人確認，見 `PMS-CLASSIFICATION.md`。
+>
+> **2026-10-09：本文「機器先收、人看剩下的」的方向以 `core/routing.py` 落地**，但改掉兩個錯：
+> 模型訊號改用分組 out-of-fold（不再拿背過照片的模型去比規則）、自動確認**不寫入** `review.csv`
+> （只決定誰要看）。見 `PMS-CLASSIFICATION.md`「每日分流與自動切換」。
 
 > 結論先講：**佇列會長大，主因不是判斷變難，是分層規則把「沒意見」的照片算成「有異議」。**
 > 修正一個比對 bug，待裁 302 → 228；再用歷史數據設自動裁決門檻，228 裡有 159（70%）可機械確認。
@@ -250,7 +254,7 @@ no_trade_signal = orph.chipsOn.isna() & orph.predWorkItem.isna()
 |---|---|---|---|
 | 1 | `review_utils.py:85` `d_chips` | 改成只比工種前綴，與 `d_spec` 對稱 | 低，純修正；有 `test_review_overrides_beat_the_title_rule` 可加案例 |
 | 2 | 新檔 `src/autoadjudicate.py` | §4.1 的門檻，寫 `review.csv` note=`auto:*` | 中；**必過 `orphan_reviews()` 檢查**，先 shadow（只印不寫）跑一輪 |
-| 3 | `orphan_ui.py` / `review_utils.orphans` | 拆 A/B/C 三型（§五）：加 `chipsOn`+`predWorkItem` 雙空白偵測，B 型標「非施工照」排除而非歸類 | 低，只加欄不改裁決 |
+| 3 | `review_utils.orphans`（原 `orphan_ui.py` 已於 2026-10-09 刪除） | 拆 A/B/C 三型（§五）：加 `chipsOn`+`predWorkItem` 雙空白偵測，B 型標「非施工照」排除而非歸類 | 低，只加欄不改裁決 |
 | 4 | `review_utils.py` tier | 加第 5 層「VLM 有異議」，進佇列不直接採信 | 中；先 PoC ③ 的 34 張看對率再定 |
 
 **架構觀察**：`src/` 裡 CVAT/g2/yolo/qs 那一大票模組，與複核佇列這條主線是解耦的
