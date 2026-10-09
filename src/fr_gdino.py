@@ -11,6 +11,7 @@
     uv run --extra gdino src/fr_gdino.py --sample 30    # 先小跑驗輸出
     uv run --extra gdino src/fr_gdino.py --all          # 全量 469 張
 """
+
 from __future__ import annotations
 
 import argparse
@@ -58,9 +59,7 @@ PATTERN_PHRASES: dict[str, list[str]] = {
 }
 
 # phrase（小寫）→ pattern 回查表；GDINO 回的 label 就是命中的短語
-PHRASE2PATTERN: dict[str, str] = {
-    p.lower(): pat for pat, phrases in PATTERN_PHRASES.items() for p in phrases
-}
+PHRASE2PATTERN: dict[str, str] = {p.lower(): pat for pat, phrases in PATTERN_PHRASES.items() for p in phrases}
 
 
 def resolve_pattern(phrase: str) -> str | None:
@@ -79,11 +78,13 @@ def resolve_pattern(phrase: str) -> str | None:
         return exact
     words = set(phrase.split())
     candidates = {
-        pat for pat, phrases in PATTERN_PHRASES.items()
+        pat
+        for pat, phrases in PATTERN_PHRASES.items()
         for p in phrases
         if (pw := set(p.lower().split())) and (words <= pw or pw <= words)
     }
     return candidates.pop() if len(candidates) == 1 else None
+
 
 MODEL_ID = "IDEA-Research/grounding-dino-tiny"
 TINY_LIST = ROOT / "data" / "field_reports" / "derived" / "tiny_images.json"
@@ -220,8 +221,10 @@ def run(args: argparse.Namespace) -> Path:
     ann_dir.mkdir(parents=True, exist_ok=True)
 
     runner = GdinoRunner(model_id=args.model)
-    print(f"[run {run_id}] model={args.model} photos={len(sample)} device={runner.device} "
-          f"box_thr={args.box_threshold} text_thr={args.text_threshold}")
+    print(
+        f"[run {run_id}] model={args.model} photos={len(sample)} device={runner.device} "
+        f"box_thr={args.box_threshold} text_thr={args.text_threshold}"
+    )
 
     per_pattern: dict[str, dict[str, Any]] = {
         pat: {"photos_with": 0, "boxes": 0, "score_sum": 0.0} for pat in PATTERN_PHRASES
@@ -269,8 +272,7 @@ def run(args: argparse.Namespace) -> Path:
             per_pattern[pat]["photos_with"] += 1
 
         if i % 25 == 0 or i == len(sample):
-            print(f"  {i}/{len(sample)} … boxes so far "
-                  f"{sum(v['boxes'] for v in per_pattern.values())}")
+            print(f"  {i}/{len(sample)} … boxes so far {sum(v['boxes'] for v in per_pattern.values())}")
 
     total_ms = round((time.time() - t0) * 1000)
     summary = {
@@ -295,9 +297,7 @@ def run(args: argparse.Namespace) -> Path:
         },
         "perPhrase": dict(sorted(per_phrase.items(), key=lambda kv: -kv[1])),
     }
-    (run_dir / "summary.json").write_text(
-        json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8"
-    )
+    (run_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
 
     print(f"\n[done] {run_dir}  elapsed={total_ms}ms  avg={summary['msPerPhoto']}ms/張")
     print(f"{'樣態':<14}{'有框照片':>8}{'框數':>6}{'均分':>7}")
