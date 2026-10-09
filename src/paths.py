@@ -55,6 +55,16 @@ FR_VLM = FIELD_REPORTS / "derived" / "vlm"  # gemma4:e4b 缺失判定（AI_GUESS
 
 VLM = DERIVED / "vlm"  # gemma4:e4b 判定輸出（尺入鏡 PoC 等，AI_GUESS 層）
 
+# --- 每日分流（core/routing.py、src/daily.py）---------------------------------
+# 分流結果是 derived（隨時可由規則＋模型重算）；抽查紀錄與每日紀錄是人看的歷史，
+# 放 data/ 根層不進 derived，砍 derived 重跑也不會丟。
+ROUTE = DERIVED / "route"  # latest.csv（每張照片在哪一桶）＋ latest.json（摘要）
+ROUTE_HISTORY = ROOT / "data" / "route-history.jsonl"  # 每次分流的摘要（週報趨勢用）
+ROUTE_AUDIT = ROOT / "data" / "route-audit.csv"  # 自動桶抽查樣本：量自動桶的真實準確率
+QUEUE_EXPORT = ROOT / "data" / "exports" / "queue"  # 給未來標註平台的待審清單
+DAILY_LOG = ROOT / "data" / "daily-log.jsonl"  # 每日編排的結果（同步／分流／重訓／切換）
+PROMOTION_LOG = ROOT / "data" / "promotion-log.jsonl"  # 自動切換的每一次考卷與決定
+
 REPORTS_OUT = ROOT / "reports"
 MODELS = ROOT / "models"
 LABELS_YAML = ROOT / "labels.yaml"
