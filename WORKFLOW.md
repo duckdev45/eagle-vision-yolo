@@ -46,7 +46,7 @@
 
 ```
 S0 Ingest ─→ S1 Label ─→ S2 Prepare ─→ S3 Split ─→ S4 Train ─→ S5 Evaluate ─→ S6 Package
-   每日 cron     隨時可重算    一次性        凍結        兩條路線       產出 reports/     ONNX
+   make daily    隨時可重算    增量          凍結        線性探針       產出 reports/     服務包
                                                                           │
                                                           S7 Console ◄────┘
                                                           （app.py 貫穿全程）
@@ -54,15 +54,15 @@ S0 Ingest ─→ S1 Label ─→ S2 Prepare ─→ S3 Split ─→ S4 Train ─�
 
 | 階段 | 指令 | 輸入 | 產物 | 契約 | 自動化守門 |
 |---|---|---|---|---|---|
-| **S0 Ingest** | `sync.py`（cron 08:00）<br>`qms.py --cells / --sample`<br>`legacy.py --root …`（一次性） | PMS REST API<br>QMS REST API | `data/raw/{photos,reports,manifest.csv}`<br>`data/qms/raw/{photos,cells,manifest}`<br>`data/legacy/raw/{photos,manifest}` | 只 append，用 `report_index.csv` 的 version 當水位線做增量。舊 pptx 那批**三層去重**：sha1 擋位元組相同（4,472 張）、dhash 擋重壓縮過的同一張（2,173 張）、dhash 比對 `raw/photos` 擋與 PMS 撞畫面（4 張）。pptx 一定重編碼，只靠 sha1 會漏掉一半 | `test_partial_sync_does_not_deactivate_everything`<br>`test_index_upsert_keeps_other_reports_watermark`<br>`test_anno_keys_catches_new_frontend_fields` |
-| **S1 Label** | （`labels.py` 被下游引用） | `manifest.csv`<br>`labels.yaml` v5<br>`data/review.csv`（人工裁決）<br>`manifest.chipsOn` / `specKey`（人寫的參考答案）<br>`reference/qms_to_report.yaml` | 記憶體中的 `cls` 欄 | 標籤屬 derived、隨時可重算；規則**順序即優先權**；不足 `min_class_size: 12` 的類別整批 drop；`drop_fallback: true` 讓「其他」不管張數一律排除（舊 pptx 進來後它有 1,140 張、455 種互不相干的標題）。`review.csv` 是**唯一照片層級**的真標籤，蓋過 title 推出來的（連被 junk 排掉的也能救回來），append-only 留痕，**不進 derived**——重跑 pipeline 不會洗掉 | `test_labels`<br>`test_rule_order_is_the_contract`<br>`test_class_names_follow_convention`<br>`test_exclude_{bad_reports,future_dates,status}` |
-| **S2 Prepare** | `prepare.py --src both` | `raw/photos` | `derived/images/*.jpg`（長邊 512） | 日報遮四角（30%×12%），但 **`reportDate >= 2026-08-14` 起上傳端存乾淨 raw，不遮**（`CLEAN_FROM`；上界取該列 `syncedAt`，擋髒的未來日期）；QMS 遮左下浮水印（0~56% × 60~100%）。兩邊遮**不同**的東西，因為兩個系統烤在圖上的東西不同。灰角＝舊資料，靠 S3 照 constrId+日期切來擋背日期 | `test_mask_corners_hits_four_corners`<br>`test_mask_watermark_covers_qms_box_only`<br>`test_clean_ids_only_takes_sane_dates_from_cutoff`<br>`test_process_mask_false_keeps_corners` |
-| **S3 Split** | `split.py` / `--qms` / `--merged` / `--with-legacy` | 標籤後的 manifest | `derived/splits/{v1,qms-v1,mix-v1}.json` | `labels` 與 `classes` **凍進 JSON**——類別集合是 `min_class_size` 現算的，資料一長就變，不凍住則前後兩次評估的分母不同卻長得一樣。舊 pptx **只進 train**（測試集要代表產品實際收到的照片），且撞到 PMS 測試日的整批丟掉；`--with-legacy` 預設關，實測不提升現有類別分數（0.823 → 0.782），價值在解鎖 9 個新類別 | `test_split_by_site_and_date`<br>`test_dhash_survives_recompression_but_separates_photos`<br>`test_legacy_site_alias_matches_pms_names` |
-| **S4 Train** | **路線 A**：`features.py` → `train.py`<br>**路線 B**：`finetune.py --stage1 / --stage2` | split JSON + 影像 | `models/probe-*.pkl`<br>`models/{backbone-qms,ft-report-*}.pt` | A = 凍結 SigLIP + LogisticRegression，**快、當診斷用**（分不開通常是標籤有矛盾，不是模型不夠大）。`C` 預設 300，用 GroupKFold（同工地同日不跨 fold）在 train 上選的；C=1 對 768 維 embedding 過度正則化，實測差 11pp<br>B = convnext_tiny 兩階段微調，必附 `--scratch` 對照組 | — |
-| **S5 Evaluate** | `evaluate.py --split … --run …` | 模型 + split | `reports/{date}-{tag}/`<br>`metrics.json` `config.json` `confusion.png` `gemini_detail.csv` `errors/` | 測試集**全程固定**日報那 99 張；Gemini 基準線走**同一份** `labels.yaml` 正規化；`config.json` 記 `labelsVersion / split / encoder / model`；`finetune.py` 的 `bestTop1` 是拿測試集挑 epoch（模型選擇洩漏），**比較一律看 `finalTop1`** | — |
-| **S6 Package** | `finetune.py`（匯出）<br>`predict.py --ckpt … --src …` | `.pt` | `.onnx` + `{ckpt}-classes.json`<br>`{ckpt}-preds-{src}.csv` | 推論前處理必須與訓練的 `eval_tf` **逐步一致**（resize 256 → center crop 224 → normalize）。ONNX 單張 CPU 19ms | — |
-| **S7 Console** | `streamlit run src/app.py` | 全部 | — | 同步、看分佈、翻照片、改 `labels.yaml`、看混淆矩陣的單一入口。照片頁**最新加入的排最前面**（manifest 是 append-only，原順序等於最舊在最前）。**⑤ 歷史資料**：舊 pptx 那批的去重統計、補了哪些類別、以及**它到底有沒有進線上那組訓練集**（讀 split 的 `trainLegacy`）。照片頁下方「判斷依據」用**遮擋法**解釋線上那顆探針：遮一格 → 重新編碼 → 看答案掉多少（`explain.probe_cam`）。要看哪一顆由 `derived/splits/CURRENT` 決定（`split.current()` 讀它，`make use` 或操作台的切換按鈕寫它）。<br>**① 同步**下方的「重跑模型」= README 那條鏈的按鈕版；跑完先顯示分數，**切換是另一顆按鈕**——換掉大家看到的答案是個決定，不是重訓的副作用。<br>**④ 複核佇列** = 任一參考答案與 title 不一致的照片配上熱區，人裁決寫進 `data/review.csv`。三個參考答案照「誰寫的」排序：`chipsOn`（主任自打的查驗重點，543 條）、`specKey`（前端點選的工種，與規則一致率 98.6%）都是**人寫的**，排前面；`predWorkItem` 是 Gemini 答的，只能當提示。chips 落到 fallback 不算不一致（查驗重點寫的是驗收條件，本來就不含工種詞——那是沒訊號，不是有異議）。這是唯一能突破「工項標籤套到照片」天花板的路（實測 268 個工項有 2 張照片，常在拍不同階段） | `test_review_overrides_beat_the_title_rule`<br>`test_review_csv_roundtrip`<br>`test_human_refs_reads_chips_and_speckey` |
-| **S8 Explain** | `explain.py --ckpt ft-report-*`（convnext，Grad-CAM）<br>`explain.py --probe`（探針，遮擋法，**批次**） | 模型 + 影像 | `reports/{date}-explain-*/`<br>`derived/features/cam-{model}-{split}-g{N}.npz` | 兩條路解釋**兩個不同的模型**，別混著看。`ft-report-*` 是 v5 改名前訓的，類別對不上現在的 split，跑起來會警告——熱區仍正確（它只解釋預測），但 top-1 與 truth 欄不可信。`--probe` 一次算完全部（593 張約 4 分鐘），只存 grid×grid 小陣列（200KB），疊圖是看的時候才畫 | `test_probe_cam_finds_the_block_that_matters` |
+| **S0 Ingest** | `sync.py`（`make daily` 每天跑） | PMS REST API | `data/raw/{photos,reports,manifest.csv}` | 只 append，用 `report_index.csv` 的 version 當水位線做增量。舊 pptx 匯入（`legacy.py`，2026-10-09 移除）留下的 `data/legacy/raw/` 原地保留，只供 G1 黃金集與 G2 考卷；QMS 匯入（`qms.py`）同日移除，資料封存於 `data/archive/qms/` | `test_partial_sync_does_not_deactivate_everything`<br>`test_index_upsert_keeps_other_reports_watermark`<br>`test_anno_keys_catches_new_frontend_fields` |
+| **S1 Label** | （`labels.py` 被下游引用） | `manifest.csv`<br>`labels.yaml` v5<br>`data/review.csv`（人工裁決）<br>`manifest.chipsOn` / `specKey`（人寫的參考答案）| 記憶體中的 `cls` 欄 | 標籤屬 derived、隨時可重算；規則**順序即優先權**；不足 `min_class_size: 12` 的類別整批 drop；`drop_fallback: true` 讓「其他」不管張數一律排除（舊 pptx 進來後它有 1,140 張、455 種互不相干的標題）。`review.csv` 是**唯一照片層級**的真標籤，蓋過 title 推出來的（連被 junk 排掉的也能救回來），append-only 留痕，**不進 derived**——重跑 pipeline 不會洗掉 | `test_labels`<br>`test_rule_order_is_the_contract`<br>`test_class_names_follow_convention`<br>`test_exclude_{bad_reports,future_dates,status}` |
+| **S2 Prepare** | `prepare.py` | `raw/photos` | `derived/images/*.jpg`（長邊 512） | 日報遮四角（30%×12%），但 **`reportDate >= 2026-08-14` 起上傳端存乾淨 raw，不遮**（`CLEAN_FROM`；上界取該列 `syncedAt`，擋髒的未來日期）。灰角＝舊資料，靠 S3 照 constrId+日期切來擋背日期 | `test_mask_corners_hits_four_corners`<br>`test_clean_ids_only_takes_sane_dates_from_cutoff`<br>`test_process_mask_false_keeps_corners` |
+| **S3 Split** | `split.py --name vN`（主線由 `pipeline/pms_workflow.py` 呼叫） | 標籤後的 manifest | `derived/splits/vN.json` | `labels` 與 `classes` **凍進 JSON**——類別集合是 `min_class_size` 現算的，資料一長就變，不凍住則前後兩次評估的分母不同卻長得一樣。只收 PMS 施作照（v40 起；舊 pptx 進訓練實測不提升現有類別 0.823 → 0.782，2026-10-09 移除該選項） | `test_split_by_site_and_date` |
+| **S4 Train** | `features.py` → `train.py` | split JSON + 影像 | `models/probe-*.pkl` | A = 凍結 SigLIP + LogisticRegression，**快、當診斷用**（分不開通常是標籤有矛盾，不是模型不夠大）。`C` 預設 300，用 GroupKFold（同工地同日不跨 fold）在 train 上選的；C=1 對 768 維 embedding 過度正則化，實測差 11pp。convnext 微調（路線 B）2026-10-09 移除，模型封存於 `data/archive/finetune/` | `test_train_evaluate_journal_chain` |
+| **S5 Evaluate** | `evaluate.py --split … --run …` | 模型 + split | `reports/{date}-{tag}/`<br>`metrics.json` `config.json` `confusion.png` `gemini_detail.csv` `errors/` | 測試集**全程固定**日報那 99 張；Gemini 基準線走**同一份** `labels.yaml` 正規化；`config.json` 記 `labelsVersion / split / encoder / model` | `test_train_evaluate_journal_chain` |
+| **S6 Package** | `export_service_bundle.py`（考卷過關由 `make daily` 自動跑）<br>`make service-image` | 探針 + split | `models/service/<版本>/`＋`models/service/CURRENT` | 推論前處理與批次前處理位元組一致（`prepare_jpeg`）；匯出失敗不動 `CURRENT` | `test_export_bundle_writes_head_encoder_and_checked_metadata`<br>`test_daily_export_moves_the_service_pointer_only_after_success` |
+| **S7 Console** | `streamlit run src/app.py` | 全部 | — | 同步、看分佈、翻照片、改 `labels.yaml`、看混淆矩陣的單一入口。照片頁**最新加入的排最前面**（manifest 是 append-only，原順序等於最舊在最前）。照片頁下方「判斷依據」用**遮擋法**解釋線上那顆探針：遮一格 → 重新編碼 → 看答案掉多少（`explain.probe_cam`）。要看哪一顆由 `derived/splits/CURRENT` 決定（`core/model_registry.current()` 讀它，`make use`、操作台的切換按鈕或 `core/promotion.py` 寫它）。<br>**① 同步**下方的「重跑模型」= README 那條鏈的按鈕版；跑完先顯示分數，**切換是另一顆按鈕**——換掉大家看到的答案是個決定，不是重訓的副作用。<br>**收件匣／進階複核／照片工種**讀同一份每日分流（`core/routing.py`）決定誰要人看；進階複核多了熱區與標框畫布。卡片上的參考答案照「誰寫的」排序：`chipsOn`（主任自打的查驗重點，543 條）、`specKey`（前端點選的工種，與規則一致率 98.6%）都是**人寫的**，排前面；`predWorkItem` 是 Gemini 答的，只能當提示。chips 落到 fallback 不算不一致（查驗重點寫的是驗收條件，本來就不含工種詞——那是沒訊號，不是有異議）。這是唯一能突破「工項標籤套到照片」天花板的路（實測 268 個工項有 2 張照片，常在拍不同階段） | `test_review_overrides_beat_the_title_rule`<br>`test_review_csv_roundtrip`<br>`test_human_refs_reads_chips_and_speckey` |
+| **S8 Explain** | `explain.py --split vN`（探針，遮擋法，**批次**） | 模型 + 影像 | `derived/features/cam-{model}-{split}-g{N}.npz` | 一次算完全部（593 張約 4 分鐘），只存 grid×grid 小陣列（200KB），疊圖是看的時候才畫 | `test_probe_cam_finds_the_block_that_matters` |
 
 ---
 
@@ -76,6 +76,7 @@ S0 Ingest ─→ S1 Label ─→ S2 Prepare ─→ S3 Split ─→ S4 Train ─�
 | **不取代 Gemini，用信心門檻串接。** | 兩邊錯的照片重疊不高；本地模型只有 10 類，而 QMS 母體顯示實際被拍的工種有 47% 落在這 10 類之外，且模型目前沒有「以上皆非」 |
 
 **副產品**：`backbone-qms`（0.884 / 26 個中類 / 已匯出 ONNX）本身就是一條獨立的產品線——QMS 稽核照自動分類。它不該被當成日報實驗的失敗品埋掉。
+> 2026-10-09：沒有任何程式消費它，程式（`qms.py`／`finetune.py`／`predict.py`／QMS 稽核頁）移除；模型、ONNX、7.3 GB 照片與 split 原封搬到 `data/archive/qms/`、`data/archive/finetune/`（清單與復原方式見 `data/archive/README.md`），要做這條產品線時從 git 歷史 `e89a2ea` 撈程式。
 
 ---
 
@@ -183,11 +184,6 @@ top-1 = 0.775 ± 0.075   (範圍 0.660 ~ 0.976)
 ```bash
 uv sync
 uv run src/sync.py                              # S0
-uv run src/qms.py --sample 12000                # S0（QMS，選用）
-uv run src/prepare.py --src both --force        # S2
-uv run src/split.py                             # S3
-uv run --extra train src/features.py            # S4-A
-uv run --extra train src/train.py               # S4-A
-uv run --extra train src/evaluate.py --run A-baseline   # S5
-uv run tests/test_core.py                       # 守門
+make model SPLIT=v46                            # S2~S8：pipeline/pms_workflow.py 同一條鏈
+make test                                       # 守門
 ```

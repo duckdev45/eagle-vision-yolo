@@ -1,5 +1,9 @@
 # 複核佇列自動化分析（2026-09-18）
 
+> 2026-10-09：`core/review_utils.py`（本文的四層 tier 佇列）已刪除。「要不要人看」統一由 `core/routing.py` 的每日分流決定，
+> 收件匣、進階複核、工作台、`make queue` 讀同一份結果（刪除前三處對同一批照片給出 478／190／376 三個答案）。
+> 下文的行號與函式名指的是刪除前的版本，見 git 歷史。
+
 > **2026-09-19 校正：本文的「規則勝 265/265、100%」不可作自動裁決依據。**
 > 原 `scripts-analysis/calib.py` 先以 `Labeler.apply()` 載入人工覆寫，再與同一批人工答案
 > 比較，造成循環比較。现行工作台的 `core/pms_review.py:calibration()` 直接計算
@@ -284,15 +288,10 @@ no_trade_signal = orph.chipsOn.isna() & orph.predWorkItem.isna()
 
 ```bash
 # 本文所有數字
-uv run src/review.py --limit 40          # 佇列現況
-uv run src/review.py --orphans            # 孤兒現況
+make queue                                          # 佇列現況（與收件匣同一份分流）
+make queue ARGS="--reason 標題沒有對應規則"          # 孤兒現況
 
-# §三 的「規則勝率」校準表（就是本文那張）
-uv run python scripts-analysis/calib.py   # 已裁 265 筆 × 訊號組合 → 規則勝率
-
-# §四 ② 的自動確認覆蓋率
-uv run python scripts-analysis/final.py   # 修正後待裁 228 → 可自動 159
-
-# §四 ③ 的 kNN 投票可行性（結論：不夠用）
-uv run python scripts-analysis/fix_probe.py  # 孤兒 × SigLIP 加權投票
+# §三 校準表、§四 ② 自動確認覆蓋率、§四 ③ kNN 投票（結論：不夠用）的一次性分析腳本
+# scripts-analysis/{calib,final,fix_probe}.py 已於 2026-10-09 移除（結論已固化進 core/routing.py），
+# 要重算：git show e89a2ea:scripts-analysis/calib.py > /tmp/calib.py && uv run python /tmp/calib.py
 ```

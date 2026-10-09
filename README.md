@@ -22,7 +22,8 @@
 1.  **職責分離 (Separation of Concerns):** 每個模組必須擁有單一、可驗證的職責。數據、規則、計算、預覽，各司其職。
 2.  **單點流程控制 (Single Entry Point):** PMS 訓練鏈的步驟定義只有一份——`pipeline/pms_workflow.py`；CLI（`src/pms.py`）與操作台（`src/ui/pipeline.py`）都消費它，不各寫一套。
 3.  **資料層先行 (Data Layer First):** 規範與合約的查詢一律經 `core/qs_data.py`、`core/contractdata.py`；PMS 側的照片、建議與裁決經 `core/pms_*.py`。腳本不直接解析 `reference/` 原始檔。
-4.  **Language Rule:** 所有程式碼和註解必須僅使用 **English and Chinese**。
+4.  **依賴只往下 (Downward Only):** `core/` 是服務層，不 import `src/` 的腳本；匯入路徑靠 editable 安裝（`uv run` 自動裝），各檔不碰 `sys.path`。由 `tests/test_architecture.py` 擋，不靠人記。
+5.  **Language Rule:** 所有程式碼和註解必須僅使用 **English and Chinese**。
 
 > 2026-10-09：V2.0 草稿期留下的示範層（根 `app.py`、`pipeline/run_full_qc_workflow.py`、
 > `core/data_loader.py`、`core/models.py`、`core/inference_utils.py`、`inference/model_runner.py`）
@@ -35,15 +36,17 @@
 
 | Module Path | Responsibility | Key Function/Purpose |
 | :--- | :--- | :--- |
-| `src/app.py` | **Presentation Shell** | **UI Layer Only.** 主導覽：收件匣／總覽／報告／進階（QMS 稽核、規範庫在進階裡），分頁實作在 `src/ui/*`。任何業務邏輯均不在此計算。 |
+| `src/app.py` | **Presentation Shell** | **UI Layer Only.** 主導覽：收件匣／總覽／報告／進階（規範庫在進階裡），分頁實作在 `src/ui/*`。任何業務邏輯均不在此計算。 |
 | `pipeline/pms_workflow.py` | **Workflow Orchestrator** | PMS 訓練鏈的步驟定義與前置檢查（版本名、切分、特徵齊備、catalog 版本）。CLI 與操作台共用。 |
 | `core/qs_data.py` | **QS Knowledge Service** | 載入與查詢公司 ISO（QS）品質標準；A~E 工具分派、請款靶、合約相依項。 |
 | `core/contractdata.py` | **Contract Service** | 逐案合約工作約定：付款節點、罰則、驗收數值、QS 交叉引用。 |
 | `core/labeler.py` | **Rule Engine** | `labels.yaml` 的規則匹配（順序即優先權），把日報標題歸到工程分類樹節點。 |
-| `core/review_utils.py` | **Calculation Service** | 複核佇列分層（tier）與孤兒鄰居參考，CLI `src/review.py` 與操作台共用同一份。 |
 | `core/evaluation_metrics.py` | **Scoring Service** | 工項融合（同日報同標題的兄弟照一起看）與信心門檻；`service/` 有平行實作，由 `tests/test_service_fusion_parity.py` 守住不漂移。 |
 | `core/pms_source.py` / `pms_store.py` / `pms_exchange.py` / `pms_review.py` / `pms_vision.py` | **PMS Data Services** | 照片來源、本機事件 SQLite、審閱包匯出匯入、裁決與候選、VLM 看圖建議。 |
-| `core/routing.py` / `core/promotion.py` | **Daily Routing & Promotion** | 每日分流（自動確認／抽查／人工佇列／隔離）與公平考卷自動切換；`src/daily.py` 編排。 |
+| `core/routing.py` / `core/promotion.py` | **Daily Routing & Promotion** | 每日分流（自動確認／抽查／人工佇列／隔離）與公平考卷自動切換；`src/daily.py` 編排。**「要不要人看」只有這一份**：收件匣、進階複核、工作台、`make pms-status`、`make queue` 都讀它。 |
+| `core/model_registry.py` | **Model Registry** | 哪一版上線（`CURRENT`）、它用哪個編碼器、split／探針／特徵檔名怎麼拼、讀特徵與探針——只寫在這一處；`tests/test_architecture.py` 擋 core 反向依賴腳本（零例外）與自己拼檔名。 |
+| `core/paths.py` | **Path Constants** | 所有資料路徑（`from core import paths`）；測試 monkeypatch 這個 module 就能把寫入全部導到暫存目錄。 |
+| `core/rule_candidates.py` | **Rule Mining** | 規則沒命中的標題 → 新工種候選詞（`make newclass` 與工作台的新類提示共用）。 |
 | `core/defects.py` | **Defect Box Service** | 缺失框資料層（HUMAN 層框才進表，AI_GUESS 不寫）。 |
 | `src/*.py` | **Pipeline Scripts** | 一步一支、可單跑：`sync` → `prepare` → `features` → `split` → `train` → `evaluate` → `explain` → `journal`。 |
 | `src/export_label_pack.py` | **Data Boundary Enforcer** | 去識別化判準包匯出（`make label-pack`）。白名單在 `docs/DATA-BOUNDARY.md`，欄位型別不符就整份拒匯——紅線由程式擋，不靠人眼。 |
@@ -67,7 +70,7 @@
 ### 3. 關鍵機制說明 (Critical Mechanisms)
 
 *   **🏷️ 標籤系統 (`core/labeler.py`):** 標籤命名必須遵循 `{工程類別}-{施作內容}` 的格式，且核心邏輯必須將舊的、模糊的標籤，轉換為屬於**「工程分類樹」**中的標準類別節點。
-*   **🧠 模型推理 (`src/predict.py` / `src/explain.py`):** 模型僅能運算「它看到了什麼」（Top1/Margin Score），它無法判斷「為什麼這張照片會這樣拍攝」（Why / Context）。推論前處理必須與訓練的 `eval_tf` 逐步一致。
+*   **🧠 模型推理 (`src/pms_inference.py` / `service/` / `src/explain.py`):** 模型僅能運算「它看到了什麼」（Top1/Margin Score），它無法判斷「為什麼這張照片會這樣拍攝」（Why / Context）。推論前處理必須與批次前處理位元組一致（`prepare_jpeg`）。
 *   **📚 知識庫 (Knowledge):**
     *   **合同資料:** 優先權最高 (Contract > QS)。
     *   **QS 標準:** 適用於所有缺乏合約規定的通用行業標準。
