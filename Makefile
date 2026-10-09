@@ -16,7 +16,7 @@ SPLIT_FLAGS := $(if $(LEGACY),--with-legacy,) \
                $(if $(MIN_TRAIN),--min-train $(MIN_TRAIN),) \
                $(if $(LEGACY_FILL),--legacy-fill $(LEGACY_FILL),)
 
-.PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases fr-gdino cvat-export g1-sample yolo-dataset defect-probe contract-priority
+.PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases fr-gdino cvat-export g1-sample yolo-dataset defect-probe contract-priority label-pack
 .PHONY: pms-app pms-status pms-candidates pms-export pms-import pms-model pms-retrain pms-ai pms-quality
 
 pms-quality: ## 盤點 PMS 原圖、前處理圖與訓練影響（唯讀原圖）
@@ -144,6 +144,9 @@ defect-probe: ## 缺失改善弱標籤 embedding baseline → CVAT 標註優先�
 
 contract-priority: ## 合約收集優先序重排（97 項合約相依 REQUIRED）
 	uv run src/contract_priority.py
+
+label-pack: ## 匯出去識別化判準包（白名單＝docs/DATA-BOUNDARY.md）；VERSION=p1，授權已簽再加 LICENSED=1
+	uv run src/export_label_pack.py --version "$(VERSION)" $(if $(LICENSED),--licensed,)
 
 jev-eval: ## Jev vs labels.yaml regex A/B（真標籤 = review.csv 人工裁決）
 	uv run src/jev_label_eval.py $(ARGS)

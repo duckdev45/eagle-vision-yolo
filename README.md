@@ -45,6 +45,7 @@
 | `core/pms_source.py` / `pms_store.py` / `pms_exchange.py` / `pms_review.py` / `pms_vision.py` | **PMS Data Services** | 照片來源、本機事件 SQLite、審閱包匯出匯入、裁決與候選、VLM 看圖建議。 |
 | `core/defects.py` | **Defect Box Service** | 缺失框資料層（HUMAN 層框才進表，AI_GUESS 不寫）。 |
 | `src/*.py` | **Pipeline Scripts** | 一步一支、可單跑：`sync` → `prepare` → `features` → `split` → `train` → `evaluate` → `explain` → `journal`。 |
+| `src/export_label_pack.py` | **Data Boundary Enforcer** | 去識別化判準包匯出（`make label-pack`）。白名單在 `docs/DATA-BOUNDARY.md`，欄位型別不符就整份拒匯——紅線由程式擋，不靠人眼。 |
 | `service/vision_api/` | **Standalone Inference API** | 照片上傳後即時判斷的獨立 FastAPI（見 `service/README.md`），不與訓練端共用程序。 |
 
 ---
