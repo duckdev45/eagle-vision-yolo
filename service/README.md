@@ -17,7 +17,9 @@ PMS Next.js 前端只呼叫 PMS NestJS。NestJS 驗證使用者、從 S3 取已�
 uv run --extra train python src/export_service_bundle.py --version v43
 ```
 
-輸出 `models/service/v43/{metadata.json,classifier.npz,encoder.safetensors}`（約 1.6 GB；metadata 另含 `encoderKey`、`reviewConfidence`、`stageRule`）。裡面只有固定視覺編碼器、分類器係數、類別與版本；不含照片、manifest 或 train/test fileId。`models/` 已被 git 忽略，**公開 GitHub repo 不存此包**。部署時從受控的私有位置把同一包放入 build context，Docker build 將其烘進 image；用 image digest 與 `metadata.json` 的 SHA256 對版本。模型服務啟動時不從網路下載權重。
+每日排程（`make daily`）在公平考卷過關、自動切換之後會自己匯出新版本，並把 `models/service/CURRENT` 指過去（匯出失敗就不動指標）；上面這條指令只在手動補匯出時用。
+
+輸出 `models/service/<版本>/{metadata.json,classifier.npz,encoder.safetensors}`（約 1.6 GB；metadata 另含 `encoderKey`、`reviewConfidence`、`stageRule`）。裡面只有固定視覺編碼器、分類器係數、類別與版本；不含照片、manifest 或 train/test fileId。`models/` 已被 git 忽略，**公開 GitHub repo 不存此包**。部署時從受控的私有位置把同一包放入 build context，Docker build 將其烘進 image；用 image digest 與 `metadata.json` 的 SHA256 對版本。模型服務啟動時不從網路下載權重。
 
 ## 本機啟動
 
@@ -55,7 +57,14 @@ curl -s http://127.0.0.1:8000/v1/predict \
 在 repo 根目錄、已匯出模型包後：
 
 ```bash
-docker build -f service/Dockerfile -t eagle-vision-api:v43 .
+make service-image              # 用 models/service/CURRENT 指的那一版，tag 為 eagle-vision-api:<版本>
+make service-image BUNDLE=v43   # 指定版本
+```
+
+模型包以 BuildKit named context（`--build-context bundle=models/service/<版本>`）帶進去，Dockerfile 不寫死版本；
+主 build context 只有 `service/` 的程式碼。
+
+```bash
 docker run --rm -p 127.0.0.1:8000:8000 \
   -e VISION_SERVICE_TOKEN="$VISION_SERVICE_TOKEN" \
   -v eagle-vision-feedback:/data \
@@ -80,7 +89,7 @@ linux 的 torch／torchvision 由 `pyproject.toml` 指到 PyTorch CPU index，�
 **x86 正式主機的延遲與記憶體需在正式主機實測**，量測方式（repo 根目錄，模型包已匯出）：
 
 ```bash
-docker build -f service/Dockerfile -t eagle-vision-api:v43 .
+make service-image BUNDLE=v43
 docker run -d --name ev-bench -e VISION_SERVICE_TOKEN="$VISION_SERVICE_TOKEN" \
   -p 127.0.0.1:18000:8000 --tmpfs /data:uid=10001 eagle-vision-api:v43
 python3 service/bench.py http://127.0.0.1:18000 "$VISION_SERVICE_TOKEN" photo1.jpg photo2.jpg 10   # 單張＋2 張批次
@@ -98,4 +107,4 @@ uv run --group dev pytest -q tests
 uv run --group dev ruff check .
 ```
 
-公開 GitHub 僅存程式與建置設定；CI 若要建立正式 image，必須先從私有 artifact storage 取得 `models/service/v43`，再依 `metadata.json` 驗證 SHA256。GitHub repo 本身不會執行 API，也不能用公開 Actions artifact 發布這份模型包。
+公開 GitHub 僅存程式與建置設定；CI 若要建立正式 image，必須先從私有 artifact storage 取得 `models/service/<版本>`（以 `models/service/CURRENT` 為準），再依 `metadata.json` 驗證 SHA256。GitHub repo 本身不會執行 API，也不能用公開 Actions artifact 發布這份模型包。

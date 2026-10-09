@@ -1,4 +1,5 @@
-# Only the independent API code and a locally exported, private model bundle enter the image.
+# Only the independent API code enters the build context. The private model bundle comes in as a
+# named context (`--build-context bundle=models/service/<version>`, see `make service-image`).
 **
 !service/
 !service/Dockerfile
@@ -8,7 +9,3 @@
 !service/vision_api/**
 service/vision_api/**/__pycache__/**
 service/vision_api/**/*.pyc
-!models/
-!models/service/
-!models/service/v43/
-!models/service/v43/**

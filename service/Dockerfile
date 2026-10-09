@@ -10,7 +10,9 @@ COPY service/pyproject.toml service/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY service/vision_api ./vision_api
-COPY models/service/v43 ./bundle
+# 模型包走 BuildKit named context（make service-image 帶 models/service/CURRENT 指的那一版），
+# 不寫死版本：每日排程考卷過關會匯出新包並更新 CURRENT。
+COPY --from=bundle . ./bundle
 
 RUN useradd --system --uid 10001 vision && mkdir /data && chown vision:vision /data
 USER vision

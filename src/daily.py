@@ -66,12 +66,14 @@ def training_debt() -> dict:
 
 
 def export_service_bundle(name: str) -> None:
-    """過關版本匯出成服務包（models/service/<版本>），已存在就不重做。要 train extra 的 torch。"""
+    """過關版本匯出成服務包（models/service/<版本>），已存在就不重做；成功才把 models/service/CURRENT
+    指過去——`make service-image` 讀它建 image，自動切換才真的接得到服務端。要 train extra 的 torch。"""
     from export_service_bundle import export_bundle
 
-    out = paths.MODELS / "service" / name
+    out = registry.service_bundle_path(name)
     if not out.exists():
         export_bundle(name, out)
+    registry.set_service_current(name)
 
 
 def main(argv: list[str] | None = None) -> int:

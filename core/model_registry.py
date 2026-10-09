@@ -113,6 +113,25 @@ def defect_probe_path(encoder_key: str) -> Path:
     return paths.MODELS / f"defect-probe-{encoder_key}.pkl"
 
 
+def service_bundle_path(version: str) -> Path:
+    """`models/service/{version}`：給獨立推論服務的匯出包（src/export_service_bundle.py）。"""
+    return paths.MODELS / "service" / version
+
+
+def service_current() -> str | None:
+    """服務端該部署哪一版：`models/service/CURRENT`。只在匯出成功後由每日編排寫入。"""
+    f = paths.MODELS / "service" / "CURRENT"
+    if not f.exists():
+        return None
+    return f.read_text().strip() or None
+
+
+def set_service_current(version: str) -> None:
+    if not (service_bundle_path(version) / "metadata.json").exists():
+        raise FileNotFoundError(f"{version} 的服務包不完整，不能指過去")
+    (paths.MODELS / "service" / "CURRENT").write_text(version.strip() + "\n")
+
+
 def load_probe(name: str | None = None, encoder_key: str | None = None) -> Any:
     """分類器本體。pickle 只讀本機自己訓練出的檔案（受信任產物），不接外部上傳。"""
     with probe_path(name, encoder_key).open("rb") as fh:

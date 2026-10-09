@@ -17,7 +17,7 @@ SPLIT ?= v8
 TRAIN := uv run --extra train
 
 .PHONY: help retrain model cams test lint fmt app sync use journal queue newclass qs qs-phases cvat-export g1-sample yolo-dataset defect-probe contract-priority label-pack
-.PHONY: daily route pms-app pms-status pms-candidates pms-export pms-import pms-model pms-retrain pms-ai pms-quality
+.PHONY: service-image daily route pms-app pms-status pms-candidates pms-export pms-import pms-model pms-retrain pms-ai pms-quality
 
 daily: ## 每日編排：同步→特徵→分流→夠多新資料就重訓→公平考卷過關自動切換（排程跑這個）
 	$(TRAIN) src/daily.py $(ARGS)
@@ -121,6 +121,13 @@ defect-probe: ## 缺失改善弱標籤 embedding baseline → CVAT 標註優先�
 
 contract-priority: ## 合約收集優先序重排（97 項合約相依 REQUIRED）
 	uv run src/contract_priority.py
+
+service-image: ## 建推論服務 image；預設用 models/service/CURRENT（考卷過關自動更新），BUNDLE=v43 可指定
+	@b="$(or $(BUNDLE),$$(cat models/service/CURRENT 2>/dev/null))"; \
+	if [ -z "$${b}" ] || [ ! -f "models/service/$${b}/metadata.json" ]; then \
+	  echo "❌ 找不到服務包 models/service/$${b}（先 make daily 過關匯出，或 BUNDLE=<版本>）"; exit 1; fi; \
+	echo "→ eagle-vision-api:$${b}"; \
+	docker build -f service/Dockerfile --build-context bundle="models/service/$${b}" -t "eagle-vision-api:$${b}" .
 
 label-pack: ## 匯出去識別化判準包（白名單＝docs/DATA-BOUNDARY.md）；VERSION=p1，授權已簽再加 LICENSED=1
 	uv run src/export_label_pack.py --version "$(VERSION)" $(if $(LICENSED),--licensed,)
