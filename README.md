@@ -20,9 +20,14 @@
 ## 💡 核心設計原則 (Core Principles)
 
 1.  **職責分離 (Separation of Concerns):** 每個模組必須擁有單一、可驗證的職責。數據、規則、計算、預覽，各司其職。
-2.  **單點流程控制 (Single Entry Point):** 所有業務流程必須通過 `pipeline/run_full_qc_workflow.py` 協調執行。
-3.  **數據時態性 (Snapshotting):** 數據處理基於 `core/data_loader.py` 產生的、特定時間點的數據快照，而非實時/累進式的查詢。
+2.  **單點流程控制 (Single Entry Point):** PMS 訓練鏈的步驟定義只有一份——`pipeline/pms_workflow.py`；CLI（`src/pms.py`）與操作台（`src/ui/pipeline.py`）都消費它，不各寫一套。
+3.  **資料層先行 (Data Layer First):** 規範與合約的查詢一律經 `core/qs_data.py`、`core/contractdata.py`；PMS 側的照片、建議與裁決經 `core/pms_*.py`。腳本不直接解析 `reference/` 原始檔。
 4.  **Language Rule:** 所有程式碼和註解必須僅使用 **English and Chinese**。
+
+> 2026-10-09：V2.0 草稿期留下的示範層（根 `app.py`、`pipeline/run_full_qc_workflow.py`、
+> `core/data_loader.py`、`core/models.py`、`core/inference_utils.py`、`inference/model_runner.py`）
+> 已移除——六個檔案互相 import、零程式消費，但文件把它們寫成鐵則，造成「文件說一套、程式跑另一套」。
+> 本節現在描述的是**實際跑得起來的路徑**；要翻舊示範層看 git 歷史。
 
 ---
 
@@ -30,15 +35,17 @@
 
 | Module Path | Responsibility | Key Function/Purpose |
 | :--- | :--- | :--- |
-| `app.py` | **Presentation Shell** | **UI Layer Only.** 僅負責展示界面和觸發流程按鈕。任何業務邏輯計算，均不能在 `app.py` 執行。 |
-| `pipeline/run_full_qc_workflow.py` | **Workflow Orchestrator** | **執行流程控制器。** 確保 Init $\to$ Sync $\to$ Preprocess $\to$ Predict $\to$ Report 的順序性。 |
-| `core/data_loader.py` | **Data Snapshot Assembler** | 協調並載入所有數據源，輸出當前狀態的統一數據快照。 |
-| `core/models.py` | **Domain Models** | 定義系統的所有不可變、核心資料結構 (The Schema)。 |
-| `core/qs_data.py` | **QS Knowledge Service** | 負責載入和管理國家級的 ISO 品質標準規則。 |
-| `core/contractdata.py` | **Contract Service** | 負責載入和管理專案合約文件中的特定約定細節。 |
-| `core/labeler.py` | **Rule Engine** | 執行複雜的文本/場景標籤規則匹配 (核心業務邏輯)。 |
-| `core/review_utils.py` | **Calculation Service** | 基於標籤規則和模型預測，計算最終的 QC 仲裁評級 (Tiering)。 |
-| `inference/model_runner.py` | **ML Inference Service** | 隔離所有 AI/CV 相關的計算：模型載入、Embedding、熱區生成。 |
+| `src/app.py` | **Presentation Shell** | **UI Layer Only.** 最上層選系統（PMS 日報 / QMS 稽核 / 規範庫），分頁實作在 `src/ui/*`。任何業務邏輯均不在此計算。 |
+| `pipeline/pms_workflow.py` | **Workflow Orchestrator** | PMS 訓練鏈的步驟定義與前置檢查（版本名、切分、特徵齊備、catalog 版本）。CLI 與操作台共用。 |
+| `core/qs_data.py` | **QS Knowledge Service** | 載入與查詢公司 ISO（QS）品質標準；A~E 工具分派、請款靶、合約相依項。 |
+| `core/contractdata.py` | **Contract Service** | 逐案合約工作約定：付款節點、罰則、驗收數值、QS 交叉引用。 |
+| `core/labeler.py` | **Rule Engine** | `labels.yaml` 的規則匹配（順序即優先權），把日報標題歸到工程分類樹節點。 |
+| `core/review_utils.py` | **Calculation Service** | 複核佇列分層（tier）與孤兒鄰居參考，CLI `src/review.py` 與操作台共用同一份。 |
+| `core/evaluation_metrics.py` | **Scoring Service** | 工項融合（同日報同標題的兄弟照一起看）與信心門檻；`service/` 有平行實作，由 `tests/test_service_fusion_parity.py` 守住不漂移。 |
+| `core/pms_source.py` / `pms_store.py` / `pms_exchange.py` / `pms_review.py` / `pms_vision.py` | **PMS Data Services** | 照片來源、本機事件 SQLite、審閱包匯出匯入、裁決與候選、VLM 看圖建議。 |
+| `core/defects.py` | **Defect Box Service** | 缺失框資料層（HUMAN 層框才進表，AI_GUESS 不寫）。 |
+| `src/*.py` | **Pipeline Scripts** | 一步一支、可單跑：`sync` → `prepare` → `features` → `split` → `train` → `evaluate` → `explain` → `journal`。 |
+| `service/vision_api/` | **Standalone Inference API** | 照片上傳後即時判斷的獨立 FastAPI（見 `service/README.md`），不與訓練端共用程序。 |
 
 ---
 
@@ -46,18 +53,18 @@
 
 ### 1. 數據輸入流程 (Data Ingestion & Sync)
 *   **目標:** 確保所有歷史/即時照片都能被系統識別。
-*   **路徑:** `app.py` $\to$ 點擊「同步」 $\to$ 啟動 `core/data_loader.py`。
-*   **重點:** 此步驟負責更新 `derived/` 屬性文件（如 `manfiest.csv`, `report_index.csv`），是所有後續計算的入場憑證。
+*   **路徑:** `src/app.py` ①同步 $\to$ `src/sync.py`（或 `make sync`）。
+*   **重點:** 此步驟負責更新 `derived/` 屬性文件（如 `manifest.csv`, `report_index.csv`），是所有後續計算的入場憑證。
 
 ### 2. 核心流程 (The Full QC Loop)
 *   **目標:** 從原始照片流到最終的仲裁分數，必須嚴格按序執行。
-*   **流程:** `workflow` $\rightarrow$ Sync $\rightarrow$ Preprocess $\rightarrow$ Model Training $\rightarrow$ Evaluation $\rightarrow$ Report.
-*   **核心挑戰:** 每一階段的輸出，都必須作為下一階段的**唯一輸入**。
+*   **流程:** `make retrain` = `data`（sync → prepare → features）$\rightarrow$ `model`（split → train → evaluate → explain → journal）。PMS 專用版同一條鏈走 `pipeline/pms_workflow.py`（`make pms-retrain`）。
+*   **核心挑戰:** 每一階段的輸出，都必須作為下一階段的**唯一輸入**；切換線上模型是獨立動作（`make use`），不是 `make model` 的副作用。
 
 ### 3. 關鍵機制說明 (Critical Mechanisms)
 
 *   **🏷️ 標籤系統 (`core/labeler.py`):** 標籤命名必須遵循 `{工程類別}-{施作內容}` 的格式，且核心邏輯必須將舊的、模糊的標籤，轉換為屬於**「工程分類樹」**中的標準類別節點。
-*   **🧠 模型推理 (`inference/model_runner.py`):** 模型僅能運算「它看到了什麼」（Top1/Margin Score），它無法判斷「為什麼這張照片會這樣拍攝」（Why / Context）。
+*   **🧠 模型推理 (`src/predict.py` / `src/explain.py`):** 模型僅能運算「它看到了什麼」（Top1/Margin Score），它無法判斷「為什麼這張照片會這樣拍攝」（Why / Context）。推論前處理必須與訓練的 `eval_tf` 逐步一致。
 *   **📚 知識庫 (Knowledge):**
     *   **合同資料:** 優先權最高 (Contract > QS)。
     *   **QS 標準:** 適用於所有缺乏合約規定的通用行業標準。
@@ -71,11 +78,13 @@
 ```bash
 # Basic Workflow Commands
 make sync                         # 運行日報同步和照片下載（只讀，不觸發重訓）
-make full_run                     # 執行完整的 L/R/E -> Train -> Report 完整週期
+make retrain SPLIT=vN             # data（sync→prepare→features）→ model（split→train→evaluate→explain→journal）
+make use SPLIT=vN                 # 看過分數後，才把操作台切到這一版
 
 # Specialized Tasks
 make newclass                     # 發現新的工種 / 規則空缺 (用於擴展規則庫)
-make inspect_ambiguity            # 檢查目前規則匹配的召回率和模糊路徑圖
+make qs / make contract           # QS 標準與合約工作約定統計（需 reference/）
+make help                         # 其餘 target 一覽
 ```
 
 *Self-Correction Note: The most common mistake is treating model output as ground truth. Always treat model prediction as a **Signal** that requires human arbitration/validation against the `data/review.csv` record.*

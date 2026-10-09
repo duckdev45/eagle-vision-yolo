@@ -50,3 +50,10 @@ reports/
 # Logs and temporary files
 *.log
 tmp/
+# YOLO 煙霧測試輸出（val 圖含外部資料集樣本）
+runs/
+
+# 從 QS／合約推導出來的活文件（含工序原文與條號）＝公司資料。
+# 2026-10-09 從版控移出；本機要留隨意，但不要再 git add。
+/phase-report.html
+/qs-phases.html

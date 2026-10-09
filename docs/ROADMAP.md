@@ -1,10 +1,9 @@
 # 下一階段規劃
 
-> 2026-08-27 初版框架 → 08-28 合約庫落地 → 09-01 彙整＋缺失工具選型定案＋YOLO11 前置決策與 G1/G2 分層門檻 → 09-02 戶外教學雙軌收集定案＋工種拆分（輕隔間/壁磚）＋C 型 41 份工序全掃 → 09-03 GDINO 煙霧測試結案（初標工具不定案，見 ②）→ 09-05 尺入鏡 PoC（gemma4:e4b 首個判定角色驗證，見 ②）＋ gemma 有無缺失煙霧測試 FAIL（初標定案全人工，見 ②）＋ 退回按鈕 spec（`docs/specs/reject-qs-code.md`）。
+> 2026-08-27 初版框架 → 08-28 合約庫落地 → 09-01 彙整＋缺失工具選型定案＋YOLO11 前置決策與 G1/G2 分層門檻 → 09-02 戶外教學雙軌收集定案＋工種拆分（輕隔間/壁磚）＋C 型 41 份工序全掃 → 09-03 GDINO 煙霧測試結案（初標工具不定案，見 ②）→ 09-05 尺入鏡 PoC（gemma4:e4b 首個判定角色驗證，見 ②）＋ gemma 有無缺失煙霧測試 FAIL（初標定案全人工，見 ②）＋ 退回按鈕 spec（`docs/specs/reject-qs-code.md`）→ 10-09 結構盤點（刪 V2.0 示範層與結案 PoC）。
 > 分析細節見 `docs/ANALYSIS.md`；本文只留決策與順序。
 
 **框架**：`收集 → 分析 → 呈現` × 三條軸線（規範 / 缺失檢查 / 工種）
-
 ## 全域狀態
 
 | | ① 規範 | ② 缺失檢查 | ③ 工種 |
@@ -99,7 +98,8 @@ C+D+E 集中在材料檢驗與定期檢查，可整批延後。
 ### 尺入鏡 PoC 結論（2026-09-05，執行序 #3 的 gemma 半部結案）
 
 80 張 QMS 日報照分層抽樣（防水 20 全收／鋼筋 8／連續壁 4／磁磚 15／油漆 15／specKey 空 18），
-gemma4:e4b 判「量測工具入鏡」（`src/vlm_ruler_poc.py`，4.8s/張，0 失敗，產出 `data/derived/vlm/ruler/`）：
+gemma4:e4b 判「量測工具入鏡」（`src/vlm_ruler_poc.py`：PoC 結案後已於 2026-10-09 刪除，
+要重跑看 git 歷史；4.8s/張，0 失敗，產出 `data/derived/vlm/ruler/`）：
 
 - **判定品質可用但須人審**：VLM 判 5 張有尺，人審 3 真 2 假（precision 60%）；負樣本抽 15 張
   複看 **0 漏判**。兩個假陽性：鋁壓條/收邊料誤判成直尺（與真押尺外觀同族，這題的天然模糊帶）、
@@ -119,7 +119,7 @@ gemma4:e4b 判「量測工具入鏡」（`src/vlm_ruler_poc.py`，4.8s/張，0 �
 
 ### gemma 有無缺失煙霧測試結論（2026-09-05，待決 #5 結案：VLM 不接初標）
 
-樂氧森 45 張（弱標籤正 25／負 20，seed 42），同批三輪（`src/fr_vlm_defect.py`，
+樂氧森 45 張（弱標籤正 25／負 20，seed 42），同批三輪（`src/fr_vlm_defect.py`，PoC 結案後已於 2026-10-09 刪除，
 `data/field_reports/derived/vlm/2026-09-05-defect-v{1,2,2b}/`），6–7s/張，0 失敗：
 
 | 輪 | prompt | recall（對弱標籤） | precision |
@@ -199,11 +199,14 @@ pass bar 是 recall ≥ 0.8 且 precision ≥ 0.6。三輪最好 32%，**FAIL**�
 **2026-09-06 孤兒院上線（OOD 隔離區，接住 fallback／無規則命中）**——佇列母體原本
 看不到這批（`drop_fallback` 排除後複核佇列也看不到）：
 
-- 操作台新增 **⑤ 孤兒院**（`ui/orphan_ui.py`）：孤兒卡＋**SigLIP 最近鄰 5 張縮圖**
+- 操作台曾有 **⑤ 孤兒院**（`ui/orphan_ui.py`）：孤兒卡＋**SigLIP 最近鄰 5 張縮圖**
   （「棄土坑施作」的鄰居全是 舊基礎切削 0.90，一眼可裁）＋探針硬猜參考＋畢業鈕
   （裁決寫 review.csv 進訓練）；候選詞挖礦（newclass 同款 greedy 覆蓋）內嵌。
-  `review.py --orphans` CLI 對等。embedding 索引走 `features.load` 全源合併
-  （只讀主檔的話 423 張 legacy 孤兒查無此人）
+  🔴 **2026-10-09 更正：這一頁已下線**——tab ⑤ 在後續改版被 `workbench('candidates')` 佔用，
+  `orphan_ui.py` 自此進不去（沒有任何 import），本次盤點已刪除該檔。
+  **孤兒裁決現在只剩 CLI：`uv run src/review.py --orphans`**（`core/review_utils.orphans` 仍在，
+  資料層沒掉）。要恢復 UI 就重接一個分頁，不要以為它還活著。
+  embedding 索引走 `features.load` 全源合併（只讀主檔的話 423 張 legacy 孤兒查無此人）
 - **`test_labels_yaml.py` 規則回歸測試**：46 個路由案例（真實標題）＋10 條載重順序
   （v6–v13 註記裡「必須排在 XX 前面」全部釘死）——上線第一天就抓到 v11 的
   `[Ee][Pp][Oo][Xx]` 對 `BFEproxy`（r 在 o 前）沒 match，15 張其實沒被收編（v14 修）
@@ -298,7 +301,7 @@ pass bar 是 recall ≥ 0.8 且 precision ≥ 0.6。三輪最好 32%，**FAIL**�
    二元視覺判斷已驗證可行（見 ②），「VLM 判有無缺失 → GDINO 只承接『確認有缺失後』的框定位」
    分工路徑可行性上升；下一步＝樂氧森 469 張上跑「有無缺失」煙霧測試，過了再談接手初標；
    不行就退回全人工冷啟動，等 YOLO11 v1 訓出來再接手。
-   **2026-09-05 pass bar（跑之前定）**：`src/fr_vlm_defect.py --sample` 正 25 負 20，分歧人審仲裁後
+   **2026-09-05 pass bar（跑之前定）**：`src/fr_vlm_defect.py --sample`（腳本已刪）正 25 負 20，分歧人審仲裁後
    recall ≥ 0.8 且 precision ≥ 0.6（尺入鏡 PoC 同級）→ VLM 輔助冷啟動；否則全人工 CVAT。
    prompt 最多改一輪。仲裁時同步記弱標籤噪音率。負例池是讚美/位置詞，缺「正常施工中」開放集
    負例——結論前補 10 張日報非缺失照再看假陽性

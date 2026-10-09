@@ -55,7 +55,8 @@ def orphan_queue() -> pd.DataFrame:
     """孤兒：規則沒接住的照片（fallback / 無規則命中）。複核佇列的母體看不到它們。
 
     `lab.apply` 的 drop_fallback 把這批排在 labeled 母體外，所以這裡自己撈——
-    操作台「⑤ 孤兒院」畫同一份（ui/orphan_ui.py）。
+    操作台「⑤ 孤兒院」曾畫同一份（`ui/orphan_ui.py`，2026-10-09 已刪，見 ROADMAP）——
+    現在孤兒裁決只剩這支 CLI（`--orphans`）。
     """
     df, lab = _labeled_raw()
     from core.review_utils import orphans as build_orphans

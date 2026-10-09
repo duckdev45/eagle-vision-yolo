@@ -87,12 +87,10 @@ ignore = [
 "src/contractdata.py" = ["F401", "F403"]
 "src/labels.py" = ["F401"]
 "src/review.py" = ["F401"]
-# inference/model_runner.py 同為薄轉發層
-"inference/model_runner.py" = ["F401"]
 "tests/test_core.py" = ["F401"]       # 測試容許寬鬆 import
 
 [tool.ruff.lint.isort]
-known-first-party = ["paths", "labels", "sync", "split", "review", "qsdata", "contractdata", "explain", "prepare", "qms", "boxes", "organize", "features", "legacy", "audit", "newclass", "taxonomy", "api"]
+known-first-party = ["paths", "labels", "sync", "split", "review", "qsdata", "contractdata", "explain", "prepare", "qms", "boxes", "organize", "features", "legacy", "newclass", "taxonomy", "api"]
 
 [tool.ruff.format]
 quote-style = "double"
