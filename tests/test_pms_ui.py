@@ -11,6 +11,7 @@ from streamlit.testing.v1 import AppTest
 import paths
 from core import pms_review as review
 from core import pms_store as store
+from core import routing
 from core.labeler import load_reviews
 
 
@@ -87,7 +88,62 @@ def test_real_entrypoint_routes_to_pms_workbench(pms_env):
     entry = Path(__file__).resolve().parents[1] / "src" / "app.py"
     result = AppTest.from_file(str(entry), default_timeout=15).run()
     assert not result.exception
-    for name in ("② 資料總覽", "③ 照片工種", "⑤ 新工種候選"):
-        result.radio(key="pms_nav").set_value(name).run()
+    assert any(s.value == "收件匣" for s in result.subheader)  # 預設落在收件匣
+    for section in ("總覽", "報告"):
+        result.session_state["main_nav"] = section
+        result.run()
         assert not result.exception
         assert not result.error
+    result.session_state["main_nav"] = "進階"
+    result.run()
+    for name in ("照片工種", "新工種候選", "同步與重訓"):
+        result.radio(key="adv_nav").set_value(name).run()
+        assert not result.exception
+        assert not result.error
+
+
+def _route_with(pms_env, monkeypatch):
+    import pandas as pd
+
+    signals = pd.DataFrame(
+        {
+            "fileId": ["b"],
+            "modelClass": ["泥作-打底"],
+            "modelConfidence": [0.99],
+            "stageSource": ["model"],
+            "signal": ["oof"],
+        }
+    )
+    monkeypatch.setattr(
+        routing, "model_signals", lambda log=print: (signals, {"model": "v9", "modelClasses": ["泥作-打底"]})
+    )
+    routing.build(log=lambda *a: None)
+
+
+def test_inbox_without_routing_offers_to_route(pms_env):
+    st.cache_data.clear()
+    result = AppTest.from_string("from ui.inbox import inbox\ninbox()", default_timeout=15).run()
+    assert not result.exception and not result.error
+    assert any(b.label == "▶ 立即分流" for b in result.button)
+
+
+def test_inbox_one_click_resolves_and_leaves_the_queue(pms_env, monkeypatch):
+    _route_with(pms_env, monkeypatch)
+    st.cache_data.clear()
+    result = AppTest.from_string("from ui.inbox import inbox\ninbox()", default_timeout=15).run()
+    assert not result.exception and not result.error
+    result.text_input(key="pms_reviewer").set_value("ui-tester")
+    rule_button = next(b for b in result.button if b.label.startswith("✓ 油漆-塗裝（規則"))
+    rule_button.click().run()
+    assert not result.exception and not result.error
+    assert load_reviews() == {"b": "油漆-塗裝"}
+    assert store.active_decisions()["b"]["reviewer"] == "ui-tester"
+    assert "b" not in set(routing.queue_items().fileId)
+
+
+def test_inbox_reviewer_defaults_from_env(pms_env, monkeypatch):
+    monkeypatch.setenv("PMS_REVIEWER", "env-reviewer")
+    _route_with(pms_env, monkeypatch)
+    st.cache_data.clear()
+    result = AppTest.from_string("from ui.inbox import inbox\ninbox()", default_timeout=15).run()
+    assert result.text_input(key="pms_reviewer").value == "env-reviewer"

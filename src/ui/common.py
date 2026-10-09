@@ -50,6 +50,16 @@ def nav(names: list[str], key: str) -> list[bool]:
     return [pick == n for n in names]
 
 
+def reviewer_input() -> str:
+    """確認者：預設帶 .env 的 PMS_REVIEWER，不必每次手打（收件匣與工作台共用同一個 key）。"""
+    return st.text_input(
+        "確認者",
+        value=os.getenv("PMS_REVIEWER", ""),
+        key="pms_reviewer",
+        placeholder="保存判斷時需要填寫（可在 .env 設 PMS_REVIEWER）",
+    )
+
+
 def run_step(fn, **kw):
     buf = io.StringIO()
     with st.spinner("執行中…"), redirect_stdout(buf):

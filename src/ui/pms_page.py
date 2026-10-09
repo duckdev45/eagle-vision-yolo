@@ -1,4 +1,4 @@
-"""PMS 日報系統頁：同步、工種分類、新工種候選及模型報告。"""
+"""PMS 日報系統頁：依名稱分派到各區塊（收件匣在 inbox.py）。"""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from labels import Labeler
 
 from .common import run_step
 from .data import load_manifest
+from .inbox import status_panel
 from .legacy_ui import legacy_page
 from .pipeline import pipeline_panel
 from .pms_workbench import workbench
@@ -20,8 +21,8 @@ from .report_view import report_view
 from .review_ui import review_queue
 
 
-def pms_page(tabs):
-    if tabs[0]:
+def pms_page(section: str) -> None:
+    if section == "同步與重訓":
         st.subheader("每日同步")
         st.caption(
             f"來源 {os.getenv('API_BASE_URL', '（未設 API_BASE_URL）')} · raw 只抄不改 · derived 隨時可砍"
@@ -69,24 +70,28 @@ def pms_page(tabs):
             "日報快照", len(list(paths.REPORTS_JSON.glob("*.json"))) if paths.REPORTS_JSON.exists() else 0
         )
 
-    if tabs[1]:
+    if section == "總覽":
+        status_panel()
         workbench("overview")
 
-    if tabs[2]:
+    if section == "照片工種":
         workbench("photos")
 
-    if tabs[3]:
+    if section == "進階複核":
         review_queue()
 
-    if tabs[4]:
+    if section == "新工種候選":
         workbench("candidates")
 
-    if tabs[5]:
+    if section == "歷史資料":
         legacy_page()
 
-    if tabs[6]:
+    if section == "標籤規則":
         st.subheader("labels.yaml")
-        st.caption("順序即優先權，第一個命中者勝。改完存檔 → 重跑組織/切分即可，不必重新下載。")
+        st.caption(
+            "順序即優先權，第一個命中者勝。這裡存檔不會跑 tests/test_labels_yaml.py 的順序契約——"
+            "正式改規則請在 repo 裡改並跑 make test。"
+        )
         text = st.text_area("規則", paths.LABELS_YAML.read_text(), height=320)
         if st.button("💾 存檔並重算"):
             paths.LABELS_YAML.write_text(text)
@@ -95,9 +100,9 @@ def pms_page(tabs):
         probe = st.text_input("試打一個標題", "13F外牆打底粉光")
         if probe:
             st.write("→", Labeler.load().label(probe) or "（排除）")
-        st.caption("完整類別與樣本門檻見②資料總覽；未知照片群組及新類核准見⑤新工種候選。")
+        st.caption("完整類別與樣本門檻見「總覽」；未知照片群組及新類核准見「進階 → 新工種候選」。")
 
-    if tabs[7]:
+    if section == "報告":
         runs = (
             sorted(
                 [

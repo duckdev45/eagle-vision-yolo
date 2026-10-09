@@ -13,6 +13,7 @@ from core import pms_exchange as exchange
 from core import pms_review as review
 from core import pms_store as store
 
+from .common import reviewer_input
 from .pms_ai import ai_panel, suggestion_card
 
 
@@ -341,7 +342,7 @@ def workbench(section: str = "photos") -> None:
     if df.empty:
         st.info("尚無有效 PMS 照片，請先到同步頁抓取日報。")
         return
-    reviewer = st.text_input("確認者", key="pms_reviewer", placeholder="保存判斷時需要填寫")
+    reviewer = reviewer_input()
     if section == "photos":
         _photos_page(df, reviewer)
     else:
