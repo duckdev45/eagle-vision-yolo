@@ -13,16 +13,11 @@
 from __future__ import annotations
 
 import json
-import os
-import sys
 from datetime import UTC, datetime
 
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
-
-import paths
+from core import paths
 
 COLUMNS = [
     "fileId",

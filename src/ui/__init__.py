@@ -12,7 +12,7 @@ nav() 刻意不用 st.tabs：它的選取是純前端狀態，元件樹一變（
 """
 
 from .common import badge, gem_line, inject_css, nav, run_step, txt, verdict
-from .data import labeled, load_manifest, local_preds
+from .data import labeled, load_manifest
 from .report_view import report_view
 
 __all__ = [
@@ -21,7 +21,6 @@ __all__ = [
     "inject_css",
     "labeled",
     "load_manifest",
-    "local_preds",
     "nav",
     "report_view",
     "run_step",

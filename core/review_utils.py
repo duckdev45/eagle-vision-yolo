@@ -11,23 +11,10 @@
 
 from __future__ import annotations
 
-import os as _os
-import sys as _sys
+import pandas as pd
 
-for _p in (
-    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-    _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src"),
-):
-    if _p not in _sys.path:
-        _sys.path.insert(0, _p)
-
-import json  # noqa: E402
-import pickle  # noqa: E402
-
-import pandas as pd  # noqa: E402
-
-import paths  # noqa: E402
-from core.labeler import Labeler  # noqa: E402
+from core import model_registry as registry
+from core.labeler import Labeler
 
 MARGIN_LOW = 0.25  # top1 與 top2 差距小於這個 = 模型在兩類之間猶豫，值得人看
 
@@ -47,14 +34,11 @@ def scores(model_key: str | None = None, split_name: str = "") -> tuple[dict, se
     """
     import numpy as np
 
-    import split as split_mod
-
-    model_key = model_key or split_mod.encoder(split_name or None)
+    model_key = model_key or registry.encoder(split_name or None)
     try:
-        z = np.load(paths.FEATURES / f"{model_key}.npz", allow_pickle=True)
-        with (paths.MODELS / f"probe-{model_key}-{split_name}.pkl").open("rb") as f:
-            clf = pickle.load(f)["clf"]
-        test = set(json.loads((paths.SPLITS / f"{split_name}.json").read_text())["test"])
+        z = np.load(registry.feature_path(model_key), allow_pickle=True)
+        clf = registry.load_probe(split_name, model_key)
+        test = set(registry.load_split(split_name)["test"])
     except (FileNotFoundError, KeyError):
         return {}, set()
     p = clf.predict_proba(z["emb"])
@@ -131,15 +115,13 @@ def orphans(df: pd.DataFrame, lab: Labeler) -> pd.DataFrame:
 def embedding_index(model_key: str = "siglip", _mtime: float = 0.0) -> tuple[list[str], object]:
     """L2 正規化後的 embedding 矩陣（fileIds, ndarray n×d），全資料源合併。
 
-    走 `features.load`（siglip + qms-siglip + legacy-siglip 合流）——孤兒與鄰居
+    走 `model_registry.load_features`（主檔 + legacy + 裁切合流）——孤兒與鄰居
     兩邊都可能來自任何源，只讀主檔的話 legacy 孤兒會查無此人。mtime 進 cache
     key 的責任在呼叫端（Streamlit cache_data 以參數為 key）。
     """
     import numpy as np
 
-    import features
-
-    ids, emb = features.load(model_key)
+    ids, emb = registry.load_features(model_key)
     norm = np.linalg.norm(emb, axis=1, keepdims=True)
     norm[norm == 0] = 1.0
     return ids, emb / norm

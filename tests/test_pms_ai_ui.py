@@ -10,7 +10,7 @@ import pytest
 import streamlit as st
 from streamlit.testing.v1 import AppTest
 
-import paths
+from core import paths
 from core import pms_vision as vision
 from core.labeler import load_reviews
 

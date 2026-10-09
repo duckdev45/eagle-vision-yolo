@@ -16,18 +16,14 @@ from __future__ import annotations
 import argparse
 import csv
 import io
-import os
-import sys
 
 from PIL import Image, ImageDraw, ImageFile
 
+from core import paths
 from photo_quality import file_problem
 
 # 上傳端偶有截斷的檔（實測 1/525）。丟掉整張不划算，殘缺的下緣照樣能訓練。
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-
-sys.path.insert(0, os.path.dirname(__file__))
-import paths  # noqa: E402
 
 CORNER_W, CORNER_H = 0.30, 0.12  # 日報膠囊：四角
 LONG_EDGE = 512

@@ -22,7 +22,7 @@ import json
 
 import pandas as pd
 
-import paths
+from core import paths
 from core.defects import load_defects
 
 IOU_MATCH = 0.5  # ROADMAP #7：框 IoU ≥ 0.5 且同類＝一致

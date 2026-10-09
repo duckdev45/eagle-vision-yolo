@@ -26,14 +26,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import pickle
 from datetime import UTC, date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
 
-import paths
-from core import pms_review
+from core import model_registry as registry
+from core import paths, pms_review
 from core import pms_store as store
 from core.evaluation_metrics import fuse_work_items
 from core.labeler import Labeler, load_reviews
@@ -90,9 +89,7 @@ def oof_proba(X, y, groups, classes: list[str], *, folds: int = OOF_FOLDS, C: fl
     from sklearn.model_selection import GroupKFold
 
     if C is None:
-        from train import DEFAULT_C
-
-        C = DEFAULT_C
+        C = registry.PROBE_C
     y = np.asarray(y)
     groups = np.asarray(groups)
     n_groups = len(set(groups.tolist()))
@@ -128,18 +125,14 @@ def _resolve(proba, classes: list[str], titles: list[str]) -> list[tuple[str, fl
 
 def model_signals(log=print) -> tuple[pd.DataFrame, dict]:
     """每張有特徵的施作照：模型類別、信心、訊號來源（oof｜live）。"""
-    import split as split_mod
-
-    name = split_mod.current()
+    name = registry.current()
     meta = {"model": name, "modelClasses": []}
     empty = pd.DataFrame(columns=["fileId", "modelClass", "modelConfidence", "stageSource", "signal"])
-    spath = paths.SPLITS / f"{name}.json"
-    feature = paths.FEATURES / f"{split_mod.encoder(name)}.npz"
-    probe = split_mod.probe_path(name)
-    if not (spath.exists() and feature.exists() and probe.exists()):
+    feature = registry.feature_path(registry.encoder(name))
+    if not (registry.split_path(name).exists() and feature.exists() and registry.probe_path(name).exists()):
         log(f"⚠ {name} 缺 split／特徵／探針，模型訊號暫缺（全部照片會進隔離或佇列）")
         return empty, meta
-    sp = json.loads(spath.read_text(encoding="utf-8"))
+    sp = registry.load_split(name)
     pool = pms_review.load_pool()
     titles = dict(zip(pool.fileId, pool.title))
     groups = {r.fileId: f"{r.constrId}|{r.reportDate}" for r in pool.itertuples()}
@@ -162,8 +155,7 @@ def model_signals(log=print) -> tuple[pd.DataFrame, dict]:
             rows.append((f, pred, conf, src, "oof"))
         log(f"模型訊號：{len(labeled)} 張 split 內照片用 {OOF_FOLDS} 折分組 out-of-fold")
 
-    with probe.open("rb") as fh:
-        clf = pickle.load(fh)["clf"]  # 本機受信任的訓練產物
+    clf = registry.load_probe(name)
     classes = [str(c) for c in clf.classes_]
     meta["modelClasses"] = classes
     if unseen:

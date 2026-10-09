@@ -12,10 +12,7 @@ import sys
 
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # root
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # src/
-
-import paths
+from core import paths
 from core.labeler import (
     SPEC_KEY_TRADE,
     Labeler,

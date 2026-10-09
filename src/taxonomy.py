@@ -10,12 +10,10 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 
-sys.path.insert(0, os.path.dirname(__file__))
-import paths
 from api import Pms
+from core import paths
 
 CACHE = paths.ROOT / "reference" / "billing_items.json"
 

@@ -13,8 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import paths
-from core import routing
+from core import paths, routing
 from core.labeler import load_reviews
 
 TODAY = date(2026, 10, 9)

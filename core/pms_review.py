@@ -17,7 +17,8 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageOps
 
-import paths
+from core import model_registry as registry
+from core import paths
 from core import pms_store as store
 from core.evaluation_metrics import REVIEW_CONFIDENCE, fuse_work_items
 from core.labeler import Labeler, load_boxes, load_reviews, save_review
@@ -171,9 +172,7 @@ def local_model() -> dict:
     預測用工項融合（同日報×同標題的兄弟照一起看，core.evaluation_metrics.fuse_work_items），
     v40 同卷 top1 0.852 → 0.911；信心與邊際也是融合後的值。
     """
-    import split as split_mod
-
-    name = split_mod.current()
+    name = registry.current()
     result = {
         "name": name,
         "classes": [],
@@ -185,17 +184,15 @@ def local_model() -> dict:
         "test": [],
         "warning": "",
     }
-    spath = paths.SPLITS / f"{name}.json"
-    model = split_mod.probe_path(name)
-    feature = paths.FEATURES / f"{split_mod.encoder(name)}.npz"
-    if spath.exists():
-        sp = json.loads(spath.read_text())
+    encoder = registry.encoder(name)
+    feature = registry.feature_path(encoder)
+    if registry.split_path(name).exists():
+        sp = registry.load_split(name)
         result.update(train=sp.get("train", []), test=sp.get("test", []))
-    if not model.exists():
+    if not registry.probe_path(name).exists():
         result["warning"] = "尚無目前版本的分類器；仍可看圖、人工分類及整理候選。"
         return result
-    with model.open("rb") as fh:
-        clf = pickle.load(fh)["clf"]
+    clf = registry.load_probe(name)
     result["classes"] = list(clf.classes_)
     if not feature.exists():
         result["warning"] = "PMS 圖像特徵尚未建立，模型預測暫缺。"
@@ -218,13 +215,13 @@ def local_model() -> dict:
         )
         if source != "model":
             result["stage"][fid] = source
-    result.update(_defect_scores(file_ids, emb, item_keys, split_mod.encoder(name)))
+    result.update(_defect_scores(file_ids, emb, item_keys, encoder))
     return result
 
 
 def _defect_scores(file_ids: list[str], emb, item_keys: list[str], encoder: str) -> dict:
-    """defect-probe（src/defect_probe.py 存的 models/defect-probe-{encoder}.pkl）→ 工項融合分數。"""
-    path = paths.MODELS / f"defect-probe-{encoder}.pkl"
+    """defect-probe（src/defect_probe.py 訓練的缺失旗標探針）→ 工項融合分數。"""
+    path = registry.defect_probe_path(encoder)
     if not path.exists():
         return {}
     with path.open("rb") as fh:
@@ -548,7 +545,7 @@ def class_inventory(df: pd.DataFrame, model: dict) -> pd.DataFrame:
 
 def discover(df: pd.DataFrame) -> list[dict]:
     """有效 PMS 未知照片的文字群組提示；不把關鍵字或相似度當新類定義。"""
-    from newclass import candidates
+    from core.rule_candidates import candidates
 
     pending = df[(df.route == "unknown") & df.reviewState.isin(["pending", "uncertain"])]
     pending = pending[pending.title.str.strip() != ""]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-import paths
+from core import paths
 from core import pms_exchange as exchange
 from core import pms_review as review
 from core.labeler import Labeler, save_review

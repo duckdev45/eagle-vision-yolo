@@ -7,8 +7,8 @@ import json
 import pandas as pd
 import streamlit as st
 
-import paths
-import split as split_mod
+from core import model_registry as registry
+from core import paths
 from core import pms_exchange as exchange
 from core import pms_review as review
 from core import pms_store as store
@@ -23,11 +23,11 @@ def _model(stamp: tuple) -> dict:
 
 
 def _snapshot():
-    name = split_mod.current()
+    name = registry.current()
     files = [
-        paths.SPLITS / f"{name}.json",
-        split_mod.probe_path(name),
-        paths.FEATURES / f"{split_mod.encoder(name)}.npz",
+        registry.split_path(name),
+        registry.probe_path(name),
+        registry.feature_path(registry.encoder(name)),
         paths.MANIFEST,  # 工項融合要看兄弟照，manifest 變了分數也會變
     ]
     stamp = tuple(

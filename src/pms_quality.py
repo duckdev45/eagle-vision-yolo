@@ -10,7 +10,7 @@ from datetime import datetime
 
 import pandas as pd
 
-import paths
+from core import paths
 from photo_quality import file_problem
 
 OUT = paths.REPORTS_OUT / "pms-photo-quality.csv"

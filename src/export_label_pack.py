@@ -24,17 +24,13 @@ import os
 import re
 import secrets
 import shutil
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-import paths
+from core import paths
 from core.defects import BUTTON_ONLY, DEFECT_PATTERNS, load_defects
 from core.labeler import Labeler, load_boxes, load_reviews
 

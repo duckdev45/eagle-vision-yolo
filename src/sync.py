@@ -17,15 +17,13 @@ import json
 import mimetypes
 import os
 import shutil
-import sys
 from datetime import UTC, datetime
 
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(__file__))
 import api as api_module
-import paths
 from api import Pms
+from core import paths
 from photo_quality import bytes_problem, file_problem
 
 PHOTO_KINDS = ("WORK_ITEM", "WORKFORCE")  # FREE_CONTENT 的 progressShot 無 title 語意，排除

@@ -17,14 +17,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
-import sys
 from collections import Counter, defaultdict
 from datetime import datetime
 
-sys.path.insert(0, os.path.dirname(__file__))
-import paths
+from core import paths
 
 # evaluate.py 寫的檔名：真{true}_猜{pred}_{fileId[:8]}.jpg
 # 非貪婪 + 尾端固定 8 碼，才不會把 hash 的前幾碼算進標籤裡

@@ -14,10 +14,8 @@ import argparse
 import os
 import re
 import shutil
-import sys
 
-sys.path.insert(0, os.path.dirname(__file__))
-import paths
+from core import paths
 from labels import labeled_manifest
 
 BAD = re.compile(r'[/\\:*?"<>|\n\r\t]+')

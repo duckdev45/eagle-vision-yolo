@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 from PIL import Image
 
-import paths
+from core import paths
 from core import pms_exchange as exchange
 from core import pms_review as review
 from core import pms_store as store
@@ -229,15 +229,15 @@ def test_pipeline_uses_pms_split_and_records_catalog(pms_env, monkeypatch):
     monkeypatch.setattr(split_mod, "build", build)
     with pytest.raises(ValueError, match="特徵"):
         pms_workflow.build_split("pms-test")
-    import features
+    from core import model_registry as registry
 
     np.savez(
-        paths.FEATURES / f"{features.DEFAULT_ENCODER}.npz",
+        paths.FEATURES / f"{registry.DEFAULT_ENCODER}.npz",
         fileIds=np.array(["a", "b", "u1"]),
         emb=np.ones((3, 2)),
     )
     result = pms_workflow.build_split("pms-test")
-    assert result["encoder"] == features.DEFAULT_ENCODER
+    assert result["encoder"] == registry.DEFAULT_ENCODER
     assert calls[-1] == {"name": "pms-test", "log": calls[-1]["log"]}  # 主線切分沒有任何 legacy 選項
     assert result["pmsCatalogVersion"] == review.catalog_version()
     assert not (paths.SPLITS / "CURRENT").exists()

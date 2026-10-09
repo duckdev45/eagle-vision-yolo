@@ -8,6 +8,11 @@
 
 .DEFAULT_GOAL := pms-app
 
+# 匯入路徑只靠 .venv 的 editable 安裝（pyproject [tool.hatch.build]）。外部帶進來的 PYTHONPATH
+# 會把別的 Python 版本的 site-packages 排在 .venv 前面——實測 Hermes 起的子行程帶著 3.14 的
+# site-packages，numpy 直接載不起來。每日排程無人值守，在這裡一律清掉。
+unexport PYTHONPATH PYTHONHOME
+
 SPLIT ?= v8
 TRAIN := uv run --extra train
 
@@ -55,7 +60,7 @@ retrain: pms-retrain ## 新照片進來之後的完整重跑（同 pms-retrain�
 model: pms-model ## 改標籤或裁決之後重訓（同 pms-model）
 
 use: ## 手動把操作台切到 SPLIT 那一版（自動切換走 make daily 的公平考卷）
-	uv run python -c "import sys;sys.path.insert(0,'src');import split;split.set_current('$(SPLIT)');print('操作台已切到', split.current())"
+	uv run python -c "from core import model_registry as r;r.set_current('$(SPLIT)');print('操作台已切到', r.current())"
 
 journal: ## 只重寫 reports/JOURNAL.md（不重算任何東西，隨時可跑）
 	uv run src/journal.py

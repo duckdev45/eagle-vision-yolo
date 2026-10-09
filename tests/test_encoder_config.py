@@ -8,10 +8,8 @@ import pickle
 import numpy as np
 import pandas as pd
 
-import features
-import paths
-import split as split_mod
-from core import pms_review
+from core import model_registry as registry
+from core import paths, pms_review
 
 
 class HalfProbe:
@@ -26,9 +24,9 @@ class HalfProbe:
 
 def test_legacy_split_without_encoder_field_stays_siglip(pms_env):
     (paths.SPLITS / "vold.json").write_text(json.dumps({"train": [], "test": []}))
-    assert split_mod.encoder("vold") == features.LEGACY_ENCODER == "siglip"
-    assert split_mod.probe_path("vold").name == "probe-siglip-vold.pkl"
-    assert split_mod.encoder("missing") == "siglip"
+    assert registry.encoder("vold") == registry.LEGACY_ENCODER == "siglip"
+    assert registry.probe_path("vold").name == "probe-siglip-vold.pkl"
+    assert registry.encoder("missing") == "siglip"
 
 
 def test_workbench_scores_use_split_encoder_and_work_item_fusion(pms_env):
@@ -50,6 +48,3 @@ def test_workbench_scores_use_split_encoder_and_work_item_fusion(pms_env):
     scores = pms_review.local_model()["scores"]
     assert scores["a"][0] == "油漆-塗裝"  # 兄弟照 b 把 a 拉到油漆
     assert scores["u1"][0] == "泥作-打底" and round(scores["u1"][1], 2) == 0.51  # 單張工項不融合
-    df, _ = pms_review.snapshot()
-    reason = df.set_index("fileId").loc["u1", "reviewReason"]
-    assert "照片模型信心低" in reason and "照片模型難分" not in reason

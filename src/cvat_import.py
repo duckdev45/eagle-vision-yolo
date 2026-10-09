@@ -15,14 +15,9 @@ from __future__ import annotations
 
 import argparse
 import glob
-import sys as _sys
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 from pathlib import Path
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
-_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "src"))
 
 from core.defects import DEFECT_PATTERNS, append_rows
 

@@ -17,7 +17,7 @@ from collections.abc import Callable
 import httpx
 from dotenv import dotenv_values
 
-import paths
+from core import paths
 from core import pms_exchange as exchange
 from core import pms_review as review
 from core import pms_store as store

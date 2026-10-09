@@ -10,18 +10,12 @@
 from __future__ import annotations
 
 import argparse
-import os
-import sys
 from pathlib import Path
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # root
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # src/
 
 import pandas as pd
 import yaml
 
-import paths
-from core import qs_data
+from core import paths, qs_data
 
 CATALOG = paths.ROOT / "reference" / "iso" / "catalog.yaml"
 OUT = paths.ROOT / "reports" / "QS標準總表.xlsx"

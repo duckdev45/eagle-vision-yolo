@@ -20,14 +20,12 @@ import json
 import sys
 import traceback
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pandas as pd
 
-import paths
+from core import model_registry as registry
+from core import paths
 
 RETRAIN_NEW_REVIEWS = 20
 RETRAIN_NEW_PHOTOS = 50
@@ -45,10 +43,8 @@ def should_retrain(new_reviews: int, new_photos: int, days_since: float) -> tupl
 
 def training_debt() -> dict:
     """現行模型訓練之後，累積了多少它沒學過的東西。"""
-    import split as split_mod
-
-    name = split_mod.current()
-    probe = split_mod.probe_path(name)
+    name = registry.current()
+    probe = registry.probe_path(name)
     trained = (
         datetime.fromtimestamp(probe.stat().st_mtime, UTC)
         if probe.exists()
@@ -67,6 +63,15 @@ def training_debt() -> dict:
     )
     days = (datetime.now(UTC) - trained).total_seconds() / 86400
     return {"model": name, "newReviews": reviews, "newPhotos": int(new_photos), "daysSince": round(days, 1)}
+
+
+def export_service_bundle(name: str) -> None:
+    """過關版本匯出成服務包（models/service/<版本>），已存在就不重做。要 train extra 的 torch。"""
+    from export_service_bundle import export_bundle
+
+    out = paths.MODELS / "service" / name
+    if not out.exists():
+        export_bundle(name, out)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -103,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.no_sync:
             step("sync", lambda: sync.sync(log=log))
         step("prepare", lambda: prepare.run(kind="report", log=log))
-        for key in dict.fromkeys((features.DEFAULT_ENCODER, features.LEGACY_ENCODER)):
+        for key in dict.fromkeys((registry.DEFAULT_ENCODER, registry.LEGACY_ENCODER)):
             step(f"features-{key}", lambda key=key: features.extract(model_key=key, src="report", log=log))
 
     from core import routing
@@ -132,7 +137,9 @@ def main(argv: list[str] | None = None) -> int:
             record["retrain"]["name"] = name
             trained = step("train", lambda: pms_workflow.run(name, log=log, with_explain=False) or True)
             if trained:
-                result = step("promote", lambda: promotion.promote(name, log=log))
+                result = step(
+                    "promote", lambda: promotion.promote(name, export=export_service_bundle, log=log)
+                )
                 if result:
                     record["promotion"] = {
                         k: result.get(k) for k in ("candidate", "baseline", "promoted", "reasons")

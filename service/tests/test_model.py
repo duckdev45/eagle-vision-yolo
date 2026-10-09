@@ -9,7 +9,8 @@ def test_clean_preprocessing_matches_training_path():
     import sys
     from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+    root = Path(__file__).resolve().parents[2]  # 服務是獨立 venv，訓練端不在它的 sys.path 上
+    sys.path[:0] = [str(root), str(root / "src")]
     from prepare import prepare_jpeg
 
     photo = Image.new("RGB", (813, 609), (37, 91, 145))

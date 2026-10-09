@@ -13,15 +13,12 @@ import json
 import pickle
 import re
 import shutil
-import sys
 from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 import features
-import paths
+from core import model_registry as registry
 from core.evaluation_metrics import REVIEW_CONFIDENCE
 from core.pms_review import STAGE_CLASSES, STAGE_GROUP, STAGE_SHARE, catalog_version
 
@@ -38,13 +35,13 @@ def export_bundle(version: str, destination: Path, *, encoder=None) -> Path:
     """將 sklearn 頭匯成數值矩陣，split 記載的編碼器（SigLIP 家族）視覺塔匯成 safetensors。"""
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", version):
         raise ValueError("模型版本格式不正確。")
-    split = json.loads((paths.SPLITS / f"{version}.json").read_text(encoding="utf-8"))
+    split = registry.load_split(version)
     if split.get("source") != "report" or split.get("trainLegacy"):
         raise ValueError("API 只封裝 PMS-only 模型。")
     if split.get("pmsCatalogVersion") != catalog_version():
         raise ValueError("目前分類表與模型訓練時不符。")
-    encoder_key = split.get("encoder") or features.LEGACY_ENCODER  # 舊 split 缺欄＝siglip
-    model_path = paths.MODELS / f"probe-{encoder_key}-{version}.pkl"
+    encoder_key = registry.encoder_of(split)
+    model_path = registry.probe_path(version, encoder_key)
     with model_path.open("rb") as stream:
         artifact = pickle.load(stream)  # 只讀本機受信任的訓練檔
     if artifact.get("split") != version or artifact.get("encoder") != encoder_key:
@@ -124,5 +121,5 @@ if __name__ == "__main__":
     parser.add_argument("--version", required=True)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
-    out = args.out or paths.MODELS / "service" / args.version
+    out = args.out or registry.service_bundle_path(args.version)
     print(export_bundle(args.version, out))

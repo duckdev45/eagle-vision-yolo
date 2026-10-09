@@ -8,12 +8,9 @@ from __future__ import annotations
 
 import io
 import os
-import sys
 from contextlib import redirect_stdout
 
 import streamlit as st
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # src/ 進 path
 
 _CSS = """<style>
 .pc{height:114px;line-height:1.5;font-size:12px;overflow:hidden}

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -10,11 +9,7 @@ import pytest
 import yaml
 from PIL import Image
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT / "src"))
-
-import paths  # noqa: E402
+from core import paths
 
 
 @pytest.fixture()

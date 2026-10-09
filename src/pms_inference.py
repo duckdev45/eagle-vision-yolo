@@ -9,21 +9,17 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
 import pickle
 import re
-import sys
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 import features
-import paths
 import prepare
-from core import pms_review, pms_store
+from core import model_registry as registry
+from core import paths, pms_review, pms_store
 from core.evaluation_metrics import REVIEW_CONFIDENCE, fuse_work_items
 from photo_quality import bytes_problem
 
@@ -39,12 +35,11 @@ class InferenceError(ValueError):
 def _artifact(version: str) -> tuple[dict, object, str]:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", version):
         raise InferenceError("invalid_model_version", "模型版本格式不正確。")
-    split_path = paths.SPLITS / f"{version}.json"
-    if not split_path.is_file():
+    if not registry.split_path(version).is_file():
         raise InferenceError("model_unavailable", f"找不到完整的 {version} 模型與切分檔。")
-    split = json.loads(split_path.read_text(encoding="utf-8"))
-    encoder = split.get("encoder") or features.LEGACY_ENCODER
-    model_path = paths.MODELS / f"probe-{encoder}-{version}.pkl"
+    split = registry.load_split(version)
+    encoder = registry.encoder_of(split)
+    model_path = registry.probe_path(version, encoder)
     if encoder not in features.MODELS or not model_path.is_file():
         raise InferenceError("model_unavailable", f"找不到完整的 {version} 模型與切分檔。")
     if split.get("source") != "report" or split.get("trainLegacy"):
@@ -98,7 +93,7 @@ class PmsShadowPredictor:
         self.version = version
         self.split, self.clf, self.model_sha256 = _artifact(version)
         self.catalog_version = self.split["pmsCatalogVersion"]
-        self.encoder = self.split.get("encoder") or features.LEGACY_ENCODER
+        self.encoder = registry.encoder_of(self.split)
         self.encoder_version = "/".join((self.encoder, *features.MODELS[self.encoder]))
         self.device = device
         self._model = None

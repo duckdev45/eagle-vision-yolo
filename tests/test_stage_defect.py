@@ -43,7 +43,7 @@ def test_resolve_stage_uses_title_only_inside_uncertain_group():
 def test_defect_flag_from_title_without_model(pms_env):
     import pandas as pd
 
-    import paths
+    from core import paths
 
     man = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False)
     man.loc[man.fileId == "b", "title"] = "油漆缺失改善"

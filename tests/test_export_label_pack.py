@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 import export_label_pack as pack
-import paths
+from core import paths
 from core.labeler import Labeler
 
 # 毒餌：這些值一個都不該出現在包裡（案場名、人名、自由文字、QS 原文）

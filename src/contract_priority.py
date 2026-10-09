@@ -24,7 +24,7 @@ from pathlib import Path
 
 import yaml
 
-import paths
+from core import paths
 from qsdata import contract_items, load
 
 # doc_no 前綴 → 工明族群。QS 編號的前兩碼就是工程大類（QS0301 模板、QS0402 泥作…）

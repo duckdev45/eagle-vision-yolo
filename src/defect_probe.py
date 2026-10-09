@@ -12,7 +12,7 @@ CVAT 冷啟動按分數由高往低抽，比 cvat_export 的組內均勻抽更�
 評估按 案場×日期 整組 StratifiedGroupKFold（split 鐵律），另列各案場內 AUC：
 正例集中在收尾階段的兩個案場，全域 AUC 會含「案場／階段」的混淆，案場內的才是畫面訊號。
 
-    uv run --extra train src/defect_probe.py [--model siglip]   # 預設 features.DEFAULT_ENCODER
+    uv run --extra train src/defect_probe.py [--model siglip]   # 預設 core/model_registry.DEFAULT_ENCODER
 
 產出：reports/defect-probe/summary.json、scores.csv（全部 PMS 施作照，分數高→低）
 """
@@ -21,16 +21,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import pickle
-import sys
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.dirname(__file__))
-import paths
+from core import paths
 
 # 缺失字與工作台缺失旗標同一個來源（core.pms_review.DEFECT_TITLE）。v17 起有工種的缺改照
 # 歸工種，所以這裡直接看標題，不看 cls。
@@ -65,12 +61,12 @@ def run(model_key: str | None = None, seeds: int = 3, log=print) -> dict:
     from sklearn.metrics import average_precision_score, roc_auc_score
     from sklearn.model_selection import StratifiedGroupKFold
 
-    import features
+    from core import model_registry as registry
     from core.labeler import load_reviews
     from core.pms_review import load_pool, work_item_keys
 
-    model_key = model_key or features.DEFAULT_ENCODER
-    z = np.load(paths.FEATURES / f"{model_key}.npz", allow_pickle=True)
+    model_key = model_key or registry.DEFAULT_ENCODER
+    z = np.load(registry.feature_path(model_key), allow_pickle=True)
     emb = dict(zip(z["fileIds"].tolist(), z["emb"]))
     df = load_pool()
     df = df[df.fileId.isin(emb)].reset_index(drop=True)
@@ -132,7 +128,7 @@ def run(model_key: str | None = None, seeds: int = 3, log=print) -> dict:
     # 全量重訓給分數：已是正例的也列出，標註時一樣需要框
     final = clf().fit(x, y)
     score = _fuse(final.predict_proba(x)[:, 1], keys)
-    with (paths.MODELS / f"defect-probe-{model_key}.pkl").open("wb") as fh:
+    with registry.defect_probe_path(model_key).open("wb") as fh:
         pickle.dump({"clf": final, "encoder": model_key, "threshold": threshold}, fh)
     out = paths.REPORTS_OUT / "defect-probe"
     out.mkdir(parents=True, exist_ok=True)
@@ -147,6 +143,6 @@ def run(model_key: str | None = None, seeds: int = 3, log=print) -> dict:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default=None, help="預設 features.DEFAULT_ENCODER")
+    ap.add_argument("--model", default=None, help="預設 core/model_registry.DEFAULT_ENCODER")
     a = ap.parse_args()
     run(a.model)

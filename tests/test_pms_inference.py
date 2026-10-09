@@ -12,9 +12,8 @@ import numpy as np
 import pytest
 from PIL import Image
 
-import paths
 import prepare
-from core import pms_review
+from core import paths, pms_review
 from pms_inference import InferenceError, PmsShadowPredictor, prepared_photo
 from pms_shadow_api import handler_for
 
@@ -133,7 +132,7 @@ class SwitchProbe:
 def test_prediction_fuses_work_item_siblings_and_reads_encoder_from_split(pms_env, monkeypatch):
     import pandas as pd
 
-    import features
+    from core import model_registry as registry
 
     man = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False)
     man["dailyReportInfoId"] = ["r1", "r1", "", "", "", "", "", "", ""]
@@ -146,11 +145,11 @@ def test_prediction_fuses_work_item_siblings_and_reads_encoder_from_split(pms_en
         "trainLegacy": [],
         "classes": ["泥作-打底", "油漆-塗裝"],
         "pmsCatalogVersion": pms_review.catalog_version(),
-        "encoder": features.DEFAULT_ENCODER,
+        "encoder": registry.DEFAULT_ENCODER,
     }
     (paths.SPLITS / "vfuse.json").write_text(json.dumps(split, ensure_ascii=False))
-    (paths.MODELS / f"probe-{features.DEFAULT_ENCODER}-vfuse.pkl").write_bytes(
-        pickle.dumps({"clf": SwitchProbe(), "split": "vfuse", "encoder": features.DEFAULT_ENCODER})
+    (paths.MODELS / f"probe-{registry.DEFAULT_ENCODER}-vfuse.pkl").write_bytes(
+        pickle.dumps({"clf": SwitchProbe(), "split": "vfuse", "encoder": registry.DEFAULT_ENCODER})
     )
     predictor = PmsShadowPredictor("vfuse")
     calls = iter([np.array([[1.0, 0.0]]), np.array([[-1.0, 0.0]])])
@@ -159,7 +158,7 @@ def test_prediction_fuses_work_item_siblings_and_reads_encoder_from_split(pms_en
     assert response["workItemPhotos"] == 2
     assert response["suggestedClass"] == "油漆-塗裝"  # 單張會答打底，兄弟照把它拉回來
     assert response["status"] == "review_required"
-    assert response["encoderVersion"].startswith(f"{features.DEFAULT_ENCODER}/")
+    assert response["encoderVersion"].startswith(f"{registry.DEFAULT_ENCODER}/")
     from core.evaluation_metrics import REVIEW_CONFIDENCE
 
     assert response["lowConfidence"] is (response["modelScore"] < REVIEW_CONFIDENCE)

@@ -1,11 +1,7 @@
 """缺失弱標籤：標題缺失字或人工裁成缺失改善才算正例。"""
 
-import sys
-from pathlib import Path
-
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from defect_probe import weak_labels
 
 

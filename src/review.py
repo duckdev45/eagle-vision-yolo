@@ -14,11 +14,8 @@ import sys
 
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # root
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # src/
-
-import paths
-import split as split_mod
+from core import model_registry as registry
+from core import paths
 from core.pms_source import work_items
 from core.review_utils import TIER_NAMES, build, scores
 from labels import Labeler, human_refs, load_reviews
@@ -42,7 +39,7 @@ def _labeled() -> tuple[pd.DataFrame, Labeler]:
 
 def queue(split_name: str = "", since: str = "") -> pd.DataFrame:
     df, lab = _labeled()
-    sc, test_ids = scores(None, split_name or split_mod.current())
+    sc, test_ids = scores(None, split_name or registry.current())
     q = build(df, lab, sc, test_ids)
     done = set(load_reviews())
     q = q[~q.fileId.isin(done)]
@@ -85,7 +82,7 @@ if __name__ == "__main__":
     ap.add_argument("--orphans", action="store_true", help="看孤兒（規則沒接住的）而不是複核佇列")
     a = ap.parse_args()
 
-    cur = a.split or split_mod.current()
+    cur = a.split or registry.current()
     if a.orphans:
         o = orphan_queue()
         print(f"模型 {cur} · 孤兒 {len(o)} 張（規則沒接住，裁完才會進訓練）")
@@ -99,7 +96,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     q = queue(a.split, a.since)
-    cur = a.split or split_mod.current()
+    cur = a.split or registry.current()
     print(
         f"模型 {cur} · 已裁 {len(load_reviews())} 筆 · 待裁 {len(q)} 張"
         + (f"（reportDate >= {a.since}）" if a.since else "")

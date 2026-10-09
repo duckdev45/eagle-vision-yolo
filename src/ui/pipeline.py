@@ -9,8 +9,8 @@ from datetime import date
 
 import streamlit as st
 
-import paths
-import split as split_mod
+from core import model_registry as registry
+from core import paths
 from pipeline import pms_workflow
 
 from .common import txt
@@ -25,15 +25,7 @@ def _encoder(model_key: str | None = None):
 
 @st.cache_resource(show_spinner=False)
 def _probe(model_key: str | None = None, split_name: str = ""):
-    import pickle
-
-    path = (
-        paths.MODELS / f"probe-{model_key}-{split_name}.pkl"
-        if model_key
-        else split_mod.probe_path(split_name)
-    )
-    with path.open("rb") as f:
-        return pickle.load(f)["clf"]
+    return registry.load_probe(split_name, model_key)
 
 
 @st.cache_resource(show_spinner=False)
@@ -52,8 +44,8 @@ def _evidence(file_id: str, grid: int):
     import explain
 
     im = Image.open(paths.IMAGES / f"{file_id}.jpg").convert("RGB")
-    hit = _cams(split_mod.current()).get(file_id) if grid == explain.GRID else None
-    cam, pred, conf, box = hit or explain.probe_cam(im, _probe(None, split_mod.current()), _encoder(), grid)
+    hit = _cams(registry.current()).get(file_id) if grid == explain.GRID else None
+    cam, pred, conf, box = hit or explain.probe_cam(im, _probe(None, registry.current()), _encoder(), grid)
     return explain.overlay(im, cam, box, pred), pred, conf, explain.to_1000(box)
 
 
@@ -61,9 +53,9 @@ def evidence_view(d2) -> None:
     """「它是看哪裡決定的」。解釋的是上面那個系統判斷，不是另一個模型的猜測。"""
     st.divider()
     st.subheader("判斷依據")
-    cur = split_mod.current()
-    if not split_mod.probe_path(cur).exists():
-        st.info(f"沒有 {split_mod.probe_path(cur).name}，先跑 train.py。")
+    cur = registry.current()
+    if not registry.probe_path(cur).exists():
+        st.info(f"沒有 {registry.probe_path(cur).name}，先跑 train.py。")
         return
     opts = d2.fileId.tolist()
     if not opts:
@@ -121,7 +113,7 @@ def run_pipeline(name: str, with_data: bool) -> None:
 def pipeline_panel() -> None:
     st.markdown("**2. 重跑模型** — 兩顆的差別只在「要不要先抓新照片」")
     st.caption("本入口只用 PMS 日報與其人工證據裁切，依案場與日期分組。候選、資訊不足及已排除照片暫停訓練。")
-    cur = split_mod.current()
+    cur = registry.current()
     st.caption(f"操作台現在看的是 **{cur}**。跑完**不會自動切換**，分數看過覺得可以，再按最下面那顆。")
     c1, c2, c3 = st.columns([2, 2, 2])
     name = c1.text_input(
@@ -162,7 +154,7 @@ def pipeline_panel() -> None:
             "`reports/JOURNAL.md` 的 per-class 那節，或讓兩顆考同一份卷。"
         )
         if st.button(f"✔ 把操作台切到 {done}"):
-            split_mod.set_current(done)
+            registry.set_current(done)
             st.cache_data.clear()
             st.cache_resource.clear()
             st.session_state.pop("pipeline_done", None)

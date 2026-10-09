@@ -8,24 +8,14 @@ manifest 組裝（labeled_manifest / legacy_manifest / pending_classes / unclaim
 
 from __future__ import annotations
 
-import os as _os
-import sys as _sys
+import json
+import re
+from datetime import UTC, date
 
-for _p in (
-    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-    _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src"),
-):
-    if _p not in _sys.path:
-        _sys.path.insert(0, _p)
+import pandas as pd
+import yaml
 
-import json  # noqa: E402
-import re  # noqa: E402
-from datetime import UTC, date  # noqa: E402
-
-import pandas as pd  # noqa: E402
-import yaml  # noqa: E402
-
-import paths  # noqa: E402
+from core import paths
 
 
 class Labeler:

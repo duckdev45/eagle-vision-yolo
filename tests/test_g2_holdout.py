@@ -8,7 +8,7 @@ import pytest
 
 def test_g2_rejects_same_day_leakage_and_groups_all_gold(pms_env):
     import g2_gate
-    import paths
+    from core import paths
 
     rows = [
         {

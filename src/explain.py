@@ -12,13 +12,11 @@
 from __future__ import annotations
 
 import argparse
-import os
-import sys
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(__file__))
-import paths
+from core import model_registry as registry
+from core import paths
 
 
 def to_1000(b):
@@ -86,9 +84,8 @@ def encoder(model_key: str | None = None):
     import torch
 
     import features
-    import split as sm
 
-    model_key = model_key or sm.encoder()
+    model_key = model_key or registry.encoder()
 
     name, pretrained = features.MODELS[model_key]
     dev = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -144,9 +141,7 @@ def probe_cam(im, clf, enc, grid: int = GRID, win: int = 2):
 
 
 def cam_cache(split_name: str, model_key: str | None = None):
-    import split as sm
-
-    model_key = model_key or sm.encoder(split_name)
+    model_key = model_key or registry.encoder(split_name)
     return paths.FEATURES / f"cam-{model_key}-{split_name}-g{GRID}.npz"
 
 
@@ -174,16 +169,11 @@ def run_probe(
     一張 grid²+1 次 forward，批次跑約 0.5 秒；593 張約 5 分鐘。
     存的是 grid×grid 的小陣列（593×36 個 float，~90KB），疊圖是看的時候才畫。
     """
-    import pickle
-
     from PIL import Image
 
-    import split as sm
-
-    split_name = split_name or sm.current()
-    model_key = model_key or sm.encoder(split_name)
-    with (paths.MODELS / f"probe-{model_key}-{split_name}.pkl").open("rb") as f:
-        clf = pickle.load(f)["clf"]
+    split_name = split_name or registry.current()
+    model_key = model_key or registry.encoder(split_name)
+    clf = registry.load_probe(split_name, model_key)
     enc = encoder(model_key)
 
     out = cam_cache(split_name, model_key)

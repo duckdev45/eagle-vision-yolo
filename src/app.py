@@ -5,7 +5,7 @@
 各系統的分頁與共用元件拆在 src/ui/：
     common.py        CSS、nav()、確認者欄、小工具（多分頁共用）
     inbox.py         收件匣（每日分流後要人看的照片）＋總覽頁的排程狀態
-    data.py          快取載入器（manifest / 本地預測）
+    data.py          快取載入器（manifest）
     pipeline.py      重跑管線 + 判斷依據（遮擋法）
     review_ui.py     複核佇列 + 標框畫布
     report_view.py   報告格式
@@ -22,13 +22,7 @@ session_state，任何 rerun 都不會掉。
 
 from __future__ import annotations
 
-import os
-import sys
-
 import streamlit as st
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.dirname(__file__))
 
 from ui.common import inject_css, nav
 from ui.inbox import inbox

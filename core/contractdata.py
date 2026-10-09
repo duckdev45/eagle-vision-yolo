@@ -20,21 +20,11 @@
 
 from __future__ import annotations
 
-import os as _os
-import sys as _sys
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
 
-for _p in (
-    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-    _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "src"),
-):
-    if _p not in _sys.path:
-        _sys.path.insert(0, _p)
-
-import re  # noqa: E402
-from dataclasses import dataclass, field  # noqa: E402
-from pathlib import Path  # noqa: E402
-
-import paths  # noqa: E402
+from core import paths
 
 RAW_DIR = paths.ROOT / "reference" / "contract" / "raw"
 MAPPINGS = paths.ROOT / "reference" / "contract" / "mappings.yaml"

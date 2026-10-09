@@ -27,14 +27,14 @@ G2 應該接進來當第二道門；在那之前，公平考卷是唯一能自�
 from __future__ import annotations
 
 import json
-import pickle
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
 
-import paths
-from core import pms_review
+from core import model_registry as registry
+from core import paths, pms_review
 from core.evaluation_metrics import fuse_work_items
 from core.labeler import load_reviews
 
@@ -45,12 +45,7 @@ MAX_CLASS_DROP = 0.15
 
 
 def _load(name: str) -> tuple[dict, Any]:
-    import split as split_mod
-
-    sp = split_mod.load(name)
-    with split_mod.probe_path(name).open("rb") as fh:
-        clf = pickle.load(fh)["clf"]  # 本機受信任的訓練產物
-    return sp, clf
+    return registry.load_split(name), registry.load_probe(name)
 
 
 def _predict(clf, emb, ids: list[str], titles: dict[str, str], keys: dict[str, str]) -> list[str]:
@@ -79,8 +74,6 @@ def score(y_true: list[str], y_pred: list[str]) -> dict:
 
 def exam(candidate: str, baseline: str) -> dict:
     """兩版在同一份公平考卷上的成績。"""
-    import features
-    import split as split_mod
 
     cand_sp, cand_clf = _load(candidate)
     base_sp, base_clf = _load(baseline)
@@ -97,12 +90,12 @@ def exam(candidate: str, baseline: str) -> dict:
     out: dict = {"candidate": candidate, "baseline": baseline, "examSize": 0}
     feats = {}
     for name in (candidate, baseline):
-        enc = split_mod.encoder(name)
+        enc = registry.encoder(name)
         if enc not in feats:
-            ids, emb = features.load(enc)
+            ids, emb = registry.load_features(enc)
             feats[enc] = ({f: i for i, f in enumerate(ids)}, emb)
     for name in (candidate, baseline):
-        row = feats[split_mod.encoder(name)][0]
+        row = feats[registry.encoder(name)][0]
         paper = [f for f in paper if f in row]
     out["examSize"] = len(paper)
     out["leakage"] = {
@@ -115,7 +108,7 @@ def exam(candidate: str, baseline: str) -> dict:
     human = load_reviews()
     human_idx = [i for i, f in enumerate(paper) if f in human]
     for role, name, clf in (("candidateScore", candidate, cand_clf), ("baselineScore", baseline, base_clf)):
-        row, emb = feats[split_mod.encoder(name)]
+        row, emb = feats[registry.encoder(name)]
         pred = _predict(clf, emb[[row[f] for f in paper]], paper, titles, keys)
         out[role] = score(y, pred)
         out[role]["humanSubset"] = {
@@ -150,15 +143,15 @@ def verdict(result: dict, *, catalog_ok: bool = True) -> tuple[bool, list[str]]:
     return not reasons, reasons
 
 
-def promote(candidate: str, *, baseline: str | None = None, export=None, log=print) -> dict:
-    """考一次；過關就切換 CURRENT 並匯出服務包。回傳的紀錄同時附加到 promotion-log.jsonl。
+def promote(
+    candidate: str, *, export: Callable[[str], object], baseline: str | None = None, log=print
+) -> dict:
+    """考一次；過關就切換 CURRENT 並呼叫 `export(candidate)` 匯出服務包。紀錄同時附加到 promotion-log.jsonl。
 
-    `export` 預設呼叫 export_service_bundle（要 train extra 的 torch）；測試注入替身。
-    匯出失敗不回滾切換——操作台用的是本機探針，服務包只是同步副本，失敗會寫進紀錄等人處理。
+    `export` 由編排端注入（src/daily.py 接 export_service_bundle，要 train extra 的 torch；測試注入替身）
+    ——服務層不反向 import 腳本。匯出失敗不回滾切換——操作台用的是本機探針，服務包只是同步副本，失敗會寫進紀錄等人處理。
     """
-    import split as split_mod
-
-    baseline = baseline or split_mod.current()
+    baseline = baseline or registry.current()
     record: dict = {
         "at": datetime.now(UTC).isoformat(timespec="seconds"),
         "candidate": candidate,
@@ -168,21 +161,14 @@ def promote(candidate: str, *, baseline: str | None = None, export=None, log=pri
         record.update(promoted=False, reasons=["候選版就是現行版"])
     else:
         result = exam(candidate, baseline)
-        catalog_ok = split_mod.load(candidate).get("pmsCatalogVersion") == pms_review.catalog_version()
+        catalog_ok = registry.load_split(candidate).get("pmsCatalogVersion") == pms_review.catalog_version()
         ok, reasons = verdict(result, catalog_ok=catalog_ok)
         record.update(promoted=ok, reasons=reasons, exam=result)
         if ok:
-            split_mod.set_current(candidate)
+            registry.set_current(candidate)
             log(f"✅ {candidate} 公平考卷過關，已切換（原 {baseline}）")
             try:
-                if export is None:
-                    from export_service_bundle import export_bundle
-
-                    out = paths.MODELS / "service" / candidate
-                    if not out.exists():
-                        export_bundle(candidate, out)
-                else:
-                    export(candidate)
+                export(candidate)
                 record["serviceBundle"] = candidate
             except Exception as exc:  # 匯出失敗要記下來，不該讓切換結果被吞掉
                 record["serviceBundleError"] = f"{type(exc).__name__}: {exc}"

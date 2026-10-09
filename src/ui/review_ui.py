@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-import paths
-import split as split_mod
+from core import model_registry as registry
+from core import paths
 
 from .common import badge, txt
 from .data import labeled
@@ -45,7 +45,7 @@ def review_queue() -> None:
         return
     lab = Labeler.load()
     classes = sorted(df.cls.unique().tolist())
-    cur = split_mod.current()
+    cur = registry.current()
     # 分層規則在 review.py，操作台與 `uv run src/review.py` 共用同一份——
     # 規則抄兩份的話，畫面上看到的佇列跟命令列印的會慢慢對不起來。
     import review as review_mod
@@ -199,7 +199,7 @@ def _boxes_now() -> dict:
 
 def _review_card(r, classes, done, save_review, names) -> None:
     img = paths.IMAGES / f"{r.fileId}.jpg"
-    hit = _cams(split_mod.current()).get(r.fileId)
+    hit = _cams(registry.current()).get(r.fileId)
     n_old = len(_boxes_now().get(r.fileId) or [])
     # 用 toggle 不用 button：button 要配 st.rerun() 才切得動狀態，而 st.rerun()
     # 會把 st.tabs 彈回第一頁——標一張框就跳走一次，沒人受得了。

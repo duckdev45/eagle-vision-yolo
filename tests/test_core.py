@@ -3,8 +3,6 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-
 import pandas as pd
 from PIL import Image
 
@@ -368,7 +366,7 @@ def test_newclass_ignores_generic_words():
     插一條含「施作」的進去會把既有類別整批攔走，而且不會有人發現。"""
     from collections import Counter
 
-    from newclass import candidates
+    from core.rule_candidates import candidates
 
     fb = Counter({"A區抿石子施作": 10, "B區抿石子施作": 8})
     ok = Counter({"3F油漆施作": 60, "B1區壁磚施作": 30})
@@ -681,7 +679,6 @@ if __name__ == "__main__":
 # ── core/ 服務層真實性（2026-09-01 接線後的守門）────────────────────────
 def test_core_services_are_real_not_stubs():
     """src/ 相容層必須指向 core/ 的真實實作，不許漂回兩份平行邏輯。"""
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
     import contractdata
     import labels
     import qsdata
@@ -709,7 +706,6 @@ def test_core_qs_service_loads_real_data():
 
     if not os.path.isdir(os.path.join(os.path.dirname(__file__), "..", "reference", "iso", "raw")):
         pytest.skip("reference/ 不在（公司資料不入 git）")
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
     from core import qs_data
 
     docs = qs_data.load()
@@ -725,7 +721,6 @@ def test_core_contract_service_loads_real_data():
 
     if not os.path.isdir(os.path.join(os.path.dirname(__file__), "..", "reference", "contract", "raw")):
         pytest.skip("reference/ 不在（公司資料不入 git）")
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
     from core import contractdata as cd
 
     docs = cd.load()
@@ -742,7 +737,6 @@ def test_contract_cross_check_and_mappings_smoke():
 
     if not os.path.isdir(os.path.join(os.path.dirname(__file__), "..", "reference", "contract", "raw")):
         pytest.skip("reference/ 不在（公司資料不入 git）")
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
     from core import contractdata as cd
 
     # 缺 mappings 的降級：查詢回空、不炸

@@ -8,10 +8,9 @@ import pytest
 import streamlit as st
 from streamlit.testing.v1 import AppTest
 
-import paths
+from core import paths, routing
 from core import pms_review as review
 from core import pms_store as store
-from core import routing
 from core.labeler import load_reviews
 
 

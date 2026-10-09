@@ -9,8 +9,7 @@ import json
 
 import pytest
 
-import paths
-from core import promotion
+from core import paths, promotion
 
 
 def _score(top1: float, f1: float, recall: dict[str, tuple[int, float]]) -> dict:
@@ -73,33 +72,33 @@ def test_empty_score_is_json_safe():
 
 
 def test_promote_switches_logs_and_exports_only_when_passed(pms_env, monkeypatch):
-    import split as split_mod
+    from core import model_registry as registry
 
-    split_mod.set_current("v1")
+    registry.set_current("v1")
     monkeypatch.setattr(
-        split_mod, "load", lambda name: {"pmsCatalogVersion": promotion.pms_review.catalog_version()}
+        registry, "load_split", lambda name: {"pmsCatalogVersion": promotion.pms_review.catalog_version()}
     )
     exported: list[str] = []
 
     monkeypatch.setattr(promotion, "exam", lambda c, b: _exam(BASE, BASE))
     rec = promotion.promote("v2", export=exported.append, log=lambda *a: None)
-    assert rec["promoted"] and split_mod.current() == "v2" and exported == ["v2"]
+    assert rec["promoted"] and registry.current() == "v2" and exported == ["v2"]
 
     worse = _score(0.5, 0.4, {"泥作-打底": (40, 0.5), "油漆-塗裝": (30, 0.5), "雜項-清潔": (3, 1.0)})
     monkeypatch.setattr(promotion, "exam", lambda c, b: _exam(worse, BASE))
     rec = promotion.promote("v3", export=exported.append, log=lambda *a: None)
-    assert not rec["promoted"] and split_mod.current() == "v2" and exported == ["v2"]
+    assert not rec["promoted"] and registry.current() == "v2" and exported == ["v2"]
 
     log = [json.loads(line) for line in paths.PROMOTION_LOG.read_text(encoding="utf-8").splitlines()]
     assert [r["promoted"] for r in log] == [True, False]
 
 
 def test_failed_export_does_not_hide_the_switch(pms_env, monkeypatch):
-    import split as split_mod
+    from core import model_registry as registry
 
-    split_mod.set_current("v1")
+    registry.set_current("v1")
     monkeypatch.setattr(
-        split_mod, "load", lambda name: {"pmsCatalogVersion": promotion.pms_review.catalog_version()}
+        registry, "load_split", lambda name: {"pmsCatalogVersion": promotion.pms_review.catalog_version()}
     )
     monkeypatch.setattr(promotion, "exam", lambda c, b: _exam(BASE, BASE))
 

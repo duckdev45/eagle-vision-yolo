@@ -14,8 +14,8 @@ def _valid_jpeg() -> bytes:
 
 
 def test_photo_quality_rejects_large_non_image_and_repairs_atomically(tmp_path, monkeypatch):
-    import paths
     import sync
+    from core import paths
     from photo_quality import bytes_problem, file_problem
 
     photos = tmp_path / "raw" / "photos"
@@ -37,8 +37,8 @@ def test_photo_quality_rejects_large_non_image_and_repairs_atomically(tmp_path, 
 
 def test_quality_audit_marks_only_train_relevant_missing_photo(tmp_path, monkeypatch):
     import labels
-    import paths
     import pms_quality
+    from core import paths
 
     photos = tmp_path / "photos"
     images = tmp_path / "images"
@@ -64,8 +64,8 @@ def test_quality_audit_marks_only_train_relevant_missing_photo(tmp_path, monkeyp
 
 
 def test_sync_refetches_existing_bad_photo(pms_env, monkeypatch):
-    import paths
     import sync
+    from core import paths
 
     good = _valid_jpeg()
     bad = paths.PHOTOS / "a.jpg"

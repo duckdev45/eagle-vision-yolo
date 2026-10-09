@@ -20,33 +20,23 @@ from __future__ import annotations
 
 import argparse
 import json
-import pickle
-import sys
 from datetime import date, datetime
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-import features as features_mod
-import paths
-import split as split_mod
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from core import model_registry as registry
+from core import paths
 from core.evaluation_metrics import PRECISION_BAR, coverage_at_precision
 
 COVERAGE_SLACK = 0.02  # 不低於 baseline − 2pt
 F1_SLACK_SIGMA = 1.0  # 不低於 baseline − 1σ
 
 
-def probe(path: Path):
-    with path.open("rb") as f:
-        return pickle.load(f)["clf"]
-
-
-def corpus(model_key: str = features_mod.LEGACY_ENCODER) -> tuple[dict, object]:
+def corpus(model_key: str = registry.LEGACY_ENCODER) -> tuple[dict, object]:
     """黃金集照片的 embedding 索引（兩版編碼器不同時各取各的）。"""
-    ids, emb = features_mod.load(model_key)
+    ids, emb = registry.load_features(model_key)
     idx = {f: i for i, f in enumerate(ids)}
     return idx, emb
 
@@ -115,8 +105,7 @@ def validate_holdout(g: pd.DataFrame, candidate: str, baseline: str) -> dict[str
     groups = dict(zip(manifest.fileId, manifest.constrId + "|" + manifest.reportDate))
     gold_groups = {groups[f] for f in g.index}
     for name in (candidate, baseline):
-        split_path = paths.SPLITS / f"{name}.json"
-        sp = json.loads(split_path.read_text(encoding="utf-8"))
+        sp = registry.load_split(name)
         foreign = set(sp.get("datasets", {}).values()) - {"pms", "crop"}
         if foreign:
             raise ValueError(f"{name} 使用非 PMS 訓練來源 {sorted(foreign)}；請用 PMS 專用流程建立比較版本。")
@@ -184,11 +173,11 @@ def main(argv: list[str] | None = None) -> int:
 
     g = golden(a.labels)
     groups = validate_holdout(g, a.candidate, a.baseline)
-    c_path, b_path = split_mod.probe_path(a.candidate), split_mod.probe_path(a.baseline)
+    c_path, b_path = registry.probe_path(a.candidate), registry.probe_path(a.baseline)
     for p in (c_path, b_path):
         if not p.exists():
             raise SystemExit(f"找不到 {p}")
-    c_enc, b_enc = split_mod.encoder(a.candidate), split_mod.encoder(a.baseline)
+    c_enc, b_enc = registry.encoder(a.candidate), registry.encoder(a.baseline)
     idx, emb = corpus(c_enc)
     b_idx, b_emb = (idx, emb) if b_enc == c_enc else corpus(b_enc)
 
@@ -213,7 +202,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     verdicts: list[bool] = []
 
-    candidate_clf, baseline_clf = probe(c_path), probe(b_path)
+    candidate_clf, baseline_clf = registry.load_probe(a.candidate), registry.load_probe(a.baseline)
     cand_c, base_c = eval_probe(candidate_clf, X, y), eval_probe(baseline_clf, Xb, y)
     report["golden_eval"] = {"candidate": cand_c, "baseline": base_c}
     print(f"\n== ① 黃金集 coverage @ precision ≥ {PRECISION_BAR}")

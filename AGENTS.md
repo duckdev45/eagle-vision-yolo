@@ -37,6 +37,9 @@ make help        # 其餘 target 說明
 2. `src/app.py` 與 `src/ui/*` 只做 UI，**任何業務邏輯不得寫在這裡**。
 3. PMS 訓練鏈的步驟定義只有一份：`pipeline/pms_workflow.py`（CLI `src/pms.py` 與操作台 `src/ui/pipeline.py` 都消費它）。
 4. 規範／合約一律經 `core/qs_data.py`、`core/contractdata.py`；PMS 照片與裁決經 `core/pms_*.py`。腳本不自己解析 `reference/` 原始檔。
+   模型版本（`CURRENT`、編碼器、split／探針／特徵檔名）一律經 `core/model_registry.py`；core 不得反向 import `src/` 腳本
+   （零例外，`tests/test_architecture.py` 擋）。腳本要共用的邏輯搬進 core；編排端的副作用由呼叫端注入。
+   匯入路徑靠 editable 安裝（`uv run` 自動裝），**不要再寫 `sys.path.insert`**；路徑常數是 `from core import paths`。
 5. 程式碼與註解只用英文與中文。
 
 > 2026-10-09：V2.0 示範層（根 `app.py`、`pipeline/run_full_qc_workflow.py`、`core/data_loader.py`、

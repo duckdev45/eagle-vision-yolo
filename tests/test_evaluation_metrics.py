@@ -1,11 +1,7 @@
 """Synthetic coverage regression tests."""
 
-import sys
-from pathlib import Path
-
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.evaluation_metrics import coverage_at_precision
 
 

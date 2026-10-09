@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import sys
-
 import pandas as pd
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 import cvat_import
-import paths
+from core import paths
 from core.defects import append_rows, load_defects
 from g1_gate import defect_gate, trade_gate
 from g1_sample import pattern_of, sample_trade

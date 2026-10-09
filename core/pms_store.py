@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 
-import paths
+from core import paths
 
 
 def database_path() -> Path:

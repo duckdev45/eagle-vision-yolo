@@ -6,14 +6,14 @@ import json
 import re
 from collections.abc import Callable
 
-import paths
-from core import pms_review
+from core import model_registry as registry
+from core import paths, pms_review
 
 
 def check_new_run(name: str) -> None:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", name):
         raise ValueError("模型版本請使用英數字、連字號或底線，最多 64 字。")
-    if (paths.SPLITS / f"{name}.json").exists() or any(paths.MODELS.glob(f"probe-*-{name}.pkl")):
+    if registry.split_path(name).exists() or any(paths.MODELS.glob(f"probe-*-{name}.pkl")):
         raise ValueError(f"{name} 已存在，請使用新的版本名稱。")
     if any(paths.REPORTS_OUT.glob(f"????-??-??-{name}")):
         raise ValueError(f"{name} 已有評估報告，請使用新的版本名稱。")
@@ -35,11 +35,10 @@ def next_version() -> str:
 def build_split(name: str, log=print) -> dict:
     import numpy as np
 
-    import features
     import split as split_mod
 
     sp = split_mod.build(name=name, log=log)
-    encoder = sp.setdefault("encoder", features.DEFAULT_ENCODER)
+    encoder = sp.setdefault("encoder", registry.DEFAULT_ENCODER)
     if not sp["train"] or not sp["test"]:
         raise ValueError("PMS 訓練或測試集為空，需要更多不同日期的有效照片。")
     if len({sp["labels"][fid] for fid in sp["train"]}) < 2:
@@ -48,7 +47,7 @@ def build_split(name: str, log=print) -> dict:
         raise ValueError("PMS 專用切分出現其他資料源。")
     available = set()
     for prefix in ("", "crops-"):
-        path = paths.FEATURES / f"{prefix}{encoder}.npz"
+        path = registry.feature_path(encoder, prefix)
         if path.exists():
             with np.load(path, allow_pickle=True) as z:
                 available.update(z["fileIds"].tolist())
@@ -58,7 +57,7 @@ def build_split(name: str, log=print) -> dict:
     sp["pmsCatalogVersion"] = pms_review.catalog_version()
     sp["pmsCatalog"] = pms_review.catalog()
     sp["trainingPolicy"] = "pms-only; human overrides title rules; pending candidates excluded"
-    (paths.SPLITS / f"{name}.json").write_text(json.dumps(sp, ensure_ascii=False, indent=1), encoding="utf-8")
+    registry.split_path(name).write_text(json.dumps(sp, ensure_ascii=False, indent=1), encoding="utf-8")
     return sp
 
 
@@ -98,9 +97,9 @@ def training_steps(
                 f"PMS 圖像特徵（{key}）",
                 lambda log, key=key: features.extract(model_key=key, src="report", log=log),
             )
-            for key in dict.fromkeys((features.DEFAULT_ENCODER, features.LEGACY_ENCODER))
+            for key in dict.fromkeys((registry.DEFAULT_ENCODER, registry.LEGACY_ENCODER))
         ),
-        ("人工證據裁切特徵", lambda log: features.extract_crops(model_key=features.DEFAULT_ENCODER, log=log)),
+        ("人工證據裁切特徵", lambda log: features.extract_crops(model_key=registry.DEFAULT_ENCODER, log=log)),
         (f"PMS 分組切分 {name}", lambda log: build_split(name, log)),
         ("工種分類器訓練", lambda log: train.probe(split_name=name, log=log)),
         ("工種分類評估", lambda log: evaluate.run(split_name=name, run_tag=name, log=log)),

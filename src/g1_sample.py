@@ -24,11 +24,10 @@ import json
 import re
 import warnings
 from datetime import datetime
-from pathlib import Path
 
 import pandas as pd
 
-import paths
+from core import paths
 
 # 缺失描述關鍵字 → 10 樣態（core.defects.DEFECT_PATTERNS）。順序即優先權：
 # 「裂縫」先於「縫隙」，否則裂縫整批被「縫」接走；「凹陷」併入 破損/脫落。
@@ -56,18 +55,15 @@ def pattern_of(desc) -> str | None:
 
 def trade_pool() -> pd.DataFrame:
     """訓練母體（PMS+legacy 已分類照片），帶當前 split 歸屬資訊。"""
-    import sys
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    import split as split_mod
+    from core import model_registry as registry
     from labels import Labeler, labeled_manifest, legacy_manifest
 
     lab = Labeler.load()
     df = pd.concat([labeled_manifest(), legacy_manifest()], ignore_index=True)
     out = lab.apply(df, overrides={})
     try:
-        cur = split_mod.current()
-        sp = json.loads((paths.SPLITS / f"{cur}.json").read_text())
+        sp = registry.load_split()
         used = {**{f: "train" for f in sp["train"]}, **{f: "test" for f in sp["test"]}}
         out = out.assign(inCurrentSplit=out.fileId.map(lambda f: used.get(f, "")))
     except (FileNotFoundError, ValueError, KeyError):

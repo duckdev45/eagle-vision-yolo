@@ -37,12 +37,26 @@ dev = [
     "pytest>=8",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# 專案以 editable 安裝進 .venv：hatchling 寫一個 .pth 把 repo 根目錄與 src/ 放上 sys.path，
+# `import paths`／`from core import ...` 在任何入口（uv run 腳本、streamlit、pytest、python -c）都找得到，
+# 各檔不必再自己 sys.path.insert（以前 55 支檔案、85 行）。只在本機用，不發佈 wheel。
+[tool.hatch.build]
+dev-mode-dirs = [".", "src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["core", "pipeline"]
+
 [tool.uv]
-package = false
+package = true
 
 # ── Ruff：lint + format 統一配置 ─────────────────────────────────────
 [tool.ruff]
 line-length = 110                     # 既有慣例：>110 只有 178 行（多為表格註解），>100 有 455 行
+src = [".", "src"]                    # 根目錄套件（core/pipeline）與 src/ 腳本都算 first-party（isort 分組）
 target-version = "py312"
 extend-exclude = [".venv", "data", "models", "reference", "reports"]
 
@@ -67,9 +81,8 @@ ignore = [
     "RUF003", # 同上（comment）
     "B905",   # zip strict=：3.10+ 語法，此專案 hot path 早已人工核過配對長度
 ]
-# 注意：E402 **刻意不 ignore**——src/ 與 core/ 的 bootstrap（sys.path.insert 後才
-# import paths）靠 80 個 `# noqa: E402` 壓制；ignore E402 會讓那些 noqa 變成
-# RUF100 的「多餘指令」，反而打破防線。
+# E402 照常檢查：import 放最上面。以前 src/ 與 core/ 要先 sys.path.insert 才能 import，靠 80 個
+# `# noqa: E402` 壓制；改成 editable 安裝（見 [tool.hatch.build]）後全數移除。
 
 [tool.ruff.lint.per-file-ignores]
 # CLI 相容層：`from core.X import *` 的 re-export 由 __all__ 認列，F401 勿擋
@@ -78,9 +91,6 @@ ignore = [
 "src/labels.py" = ["F401"]
 "src/review.py" = ["F401"]
 "tests/test_core.py" = ["F401"]       # 測試容許寬鬆 import
-
-[tool.ruff.lint.isort]
-known-first-party = ["paths", "labels", "sync", "split", "review", "qsdata", "contractdata", "explain", "prepare", "boxes", "organize", "features", "newclass", "taxonomy", "api"]
 
 [tool.ruff.format]
 quote-style = "double"

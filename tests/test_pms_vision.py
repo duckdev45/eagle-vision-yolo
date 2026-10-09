@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 from PIL import Image
 
-import paths
+from core import paths
 from core import pms_review as review
 from core import pms_store as store
 from core import pms_vision as vision

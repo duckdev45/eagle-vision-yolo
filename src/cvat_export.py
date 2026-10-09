@@ -24,16 +24,13 @@ import argparse
 import json
 import random
 import shutil
-import sys
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
-import paths
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # root：core.defects 用
+from core import paths
 
 
 def pool_pms(sample: int, seed: int) -> pd.DataFrame:

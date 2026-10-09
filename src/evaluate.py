@@ -10,18 +10,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import pickle
 import shutil
-import sys
 from datetime import date
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(__file__))
-import paths
-import split as split_mod
+from core import model_registry as registry
+from core import paths
 from labels import Labeler, labeled_manifest
 
 
@@ -161,20 +157,17 @@ def run(
 ) -> str:
     from sklearn.metrics import classification_report
 
-    import features
-
-    sp = split_mod.load(split_name)
-    model_key = model_key or split_mod.encoder(split_name)
+    sp = registry.load_split(split_name)
+    model_key = model_key or registry.encoder(split_name)
     cls = sp["labels"]
-    ids, emb = features.load(model_key)
+    ids, emb = registry.load_features(model_key)
     idx = {f: i for i, f in enumerate(ids)}
 
     test_ids = [f for f in sp["test"] if f in idx and f in cls]
     x = np.stack([emb[idx[f]] for f in test_ids])
     y = np.array([cls[f] for f in test_ids])
 
-    with (paths.MODELS / f"probe-{model_key}-{split_name}.pkl").open("rb") as fh:
-        clf = pickle.load(fh)["clf"]
+    clf = registry.load_probe(split_name, model_key)
     pred = clf.predict(x)
 
     outdir = paths.REPORTS_OUT / f"{date.today():%Y-%m-%d}-{run_tag}"
@@ -252,7 +245,7 @@ def run(
                 "labelsVersion": Labeler.load().version,
                 "split": split_name,
                 "encoder": model_key,
-                "model": f"probe-{model_key}-{split_name}.pkl",
+                "model": registry.probe_path(split_name, model_key).name,
             },
             ensure_ascii=False,
             indent=1,

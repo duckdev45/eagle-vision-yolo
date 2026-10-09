@@ -7,8 +7,8 @@ import os
 import streamlit as st
 
 import organize
-import paths
 import sync as sync_mod
+from core import paths
 from labels import Labeler
 
 from .common import run_step

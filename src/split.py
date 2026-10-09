@@ -18,54 +18,14 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
-import sys
 from datetime import date
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.dirname(__file__))
-import paths
+from core import model_registry as registry
+from core import paths
 from labels import labeled_manifest
-
-# 操作台與解釋工具要看哪一組。存成檔案而不是原始碼常數，操作台的按鈕才改得動
-# ——否則重跑完還要手改程式碼，那個手動步驟一定有人忘記
-# （實測踩過：畫面上一直顯示 v1 的 0.712，實際模型已經 0.847）。
-FALLBACK = "v8"
 
 # 稀有類別保底的預設值。放這裡而不是各呼叫端各寫一份——CLI 與 pms_workflow 必須切出同一份 split。
 DEFAULT_MIN_TRAIN = 12  # train 少於這個數 → 把含它的測試日整天搬回 train
-
-
-def current() -> str:
-    f = paths.SPLITS / "CURRENT"
-    return f.read_text().strip() if f.exists() else FALLBACK
-
-
-def set_current(name: str) -> None:
-    """切換操作台指向的模型。刻意是獨立一步，不塞進重訓流程——
-    換掉所有人看到的答案是個決定，不該是跑完訓練的副作用。"""
-    paths.ensure_dirs()
-    (paths.SPLITS / "CURRENT").write_text(name.strip())
-
-
-def encoder(name: str | None = None) -> str:
-    """這個 split 的模型用哪個編碼器——split 檔說了算（features.DEFAULT_ENCODER 只管新切的）。
-
-    v41 以前的 split 沒寫 `encoder` 欄，那時只有 siglip，所以缺欄＝LEGACY_ENCODER；
-    舊版模型因此不必重訓就能照常被操作台與推論找到。
-    """
-    import features
-
-    f = paths.SPLITS / f"{name or current()}.json"
-    if not f.exists():
-        return features.LEGACY_ENCODER
-    return json.loads(f.read_text()).get("encoder") or features.LEGACY_ENCODER
-
-
-def probe_path(name: str | None = None):
-    """`models/probe-{encoder}-{split}.pkl`——所有讀探針的地方都走這裡，別再自己拼。"""
-    name = name or current()
-    return paths.MODELS / f"probe-{encoder(name)}-{name}.pkl"
 
 
 def _write(payload: dict, log=print) -> dict:
@@ -73,7 +33,7 @@ def _write(payload: dict, log=print) -> dict:
     # 前後兩次評估的分母不同卻長得一樣，數字不可比。凍在這裡，evaluate 才有據可查。
     payload.setdefault("classes", sorted(set(payload["labels"].values())))
     paths.ensure_dirs()
-    (paths.SPLITS / f"{payload['name']}.json").write_text(json.dumps(payload, ensure_ascii=False, indent=1))
+    registry.split_path(payload["name"]).write_text(json.dumps(payload, ensure_ascii=False, indent=1))
     log(
         f"split {payload['name']}: train {len(payload['train'])} / test {len(payload['test'])}"
         f" / {len(set(payload['labels'].values()))} 類"
@@ -231,13 +191,11 @@ def build(
     if crops:
         log(f"  人標框裁切 {len(crops)} 塊併入 train")
 
-    import features
-
     payload = {
         "name": name,
         "source": "report",
-        # 這份 split 的模型用哪個編碼器；train/evaluate/操作台/推論都從這裡讀（見 encoder()）
-        "encoder": encoder_key or features.DEFAULT_ENCODER,
+        # 這份 split 的模型用哪個編碼器；train/evaluate/操作台/推論都從這裡讀（見 core/model_registry.py）
+        "encoder": encoder_key or registry.DEFAULT_ENCODER,
         "testFrac": test_frac,
         "minTrain": min_train,
         # 搬過哪幾天要留證據：測試集比 testFrac 算出來的小，看到這個才知道為什麼
@@ -266,10 +224,6 @@ def build(
     return out
 
 
-def load(name: str = "v1") -> dict:
-    return json.loads((paths.SPLITS / f"{name}.json").read_text())
-
-
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", required=True)
@@ -280,6 +234,6 @@ if __name__ == "__main__":
         default=DEFAULT_MIN_TRAIN,
         help="稀有類別訓練保底：train 少於 N 張就把含它的測試日整天搬回 train（0 = 關）",
     )
-    ap.add_argument("--encoder", default=None, help="模型編碼器（預設 features.DEFAULT_ENCODER）")
+    ap.add_argument("--encoder", default=None, help="模型編碼器（預設 core/model_registry.DEFAULT_ENCODER）")
     a = ap.parse_args()
     build(a.name, a.test_frac, min_train=a.min_train, encoder_key=a.encoder)
