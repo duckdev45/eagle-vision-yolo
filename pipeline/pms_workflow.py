@@ -19,6 +19,19 @@ def check_new_run(name: str) -> None:
         raise ValueError(f"{name} 已有評估報告，請使用新的版本名稱。")
 
 
+def next_version() -> str:
+    """下一個沒用過的 vNN：取 split、探針、報告三處出現過的最大號 +1。
+
+    只看 CURRENT 往上數會撞到「訓練到一半失敗、留下報告但沒有 split」的號碼；
+    每日排程無人值守，版本名必須自己找得到。
+    """
+    seen = [p.stem for p in paths.SPLITS.glob("v*.json")]
+    seen += [p.stem.rsplit("-", 1)[-1] for p in paths.MODELS.glob("probe-*-v*.pkl")]
+    seen += [p.name[11:] for p in paths.REPORTS_OUT.glob("????-??-??-v*")]
+    nums = [int(m.group(1)) for v in seen if (m := re.fullmatch(r"v(\d+)", v))]
+    return f"v{max(nums, default=0) + 1}"
+
+
 def build_split(name: str, log=print) -> dict:
     import numpy as np
 
@@ -49,8 +62,14 @@ def build_split(name: str, log=print) -> dict:
     return sp
 
 
-def training_steps(name: str, with_data: bool = False) -> list[tuple[str, Callable]]:
-    """建立步驟不執行工作；切換模型仍需獨立操作。"""
+def training_steps(
+    name: str, with_data: bool = False, with_explain: bool = True
+) -> list[tuple[str, Callable]]:
+    """建立步驟不執行工作；切換模型是另一個決定（操作台手動，或每日排程的 core.promotion 考卷）。
+
+    with_explain=False 跳過圖像解釋：它最慢（約 12 秒／張）且不影響分類分數，
+    操作台在快取缺席時會現算熱區，所以無人值守的每日重訓先跳過。
+    """
     check_new_run(name)
     import evaluate
     import explain
@@ -85,14 +104,18 @@ def training_steps(name: str, with_data: bool = False) -> list[tuple[str, Callab
         (f"PMS 分組切分 {name}", lambda log: build_split(name, log)),
         ("工種分類器訓練", lambda log: train.probe(split_name=name, log=log)),
         ("工種分類評估", lambda log: evaluate.run(split_name=name, run_tag=name, log=log)),
-        ("更新圖像解釋", lambda log: explain.run_probe(split_name=name, log=log)),
+        *(
+            [("更新圖像解釋", lambda log: explain.run_probe(split_name=name, log=log))]
+            if with_explain
+            else []
+        ),
         ("更新學習紀錄", lambda log: log("學習紀錄 →", journal.write())),
     ]
     return steps
 
 
-def run(name: str, with_data: bool = False, log=print) -> None:
-    for title, fn in training_steps(name, with_data):
+def run(name: str, with_data: bool = False, log=print, with_explain: bool = True) -> None:
+    for title, fn in training_steps(name, with_data, with_explain):
         log(title)
         fn(log)
     log(f"{name} 已完成。請檢查評估報告，再明確切換使用版本。")

@@ -17,7 +17,13 @@ SPLIT_FLAGS := $(if $(LEGACY),--with-legacy,) \
                $(if $(LEGACY_FILL),--legacy-fill $(LEGACY_FILL),)
 
 .PHONY: help retrain model data cams test lint fmt app sync use legacy journal queue newclass qs qs-phases fr-gdino cvat-export g1-sample yolo-dataset defect-probe contract-priority label-pack
-.PHONY: pms-app pms-status pms-candidates pms-export pms-import pms-model pms-retrain pms-ai pms-quality
+.PHONY: daily route pms-app pms-status pms-candidates pms-export pms-import pms-model pms-retrain pms-ai pms-quality
+
+daily: ## 每日編排：同步→特徵→分流→夠多新資料就重訓→公平考卷過關自動切換（排程跑這個）
+	$(TRAIN) src/daily.py $(ARGS)
+
+route: ## 只重算分流（收件匣）；不同步、不訓練
+	uv run src/daily.py --only-route
 
 pms-quality: ## 盤點 PMS 原圖、前處理圖與訓練影響（唯讀原圖）
 	uv run src/pms_quality.py
@@ -43,7 +49,7 @@ pms-import: ## 匯入 AI 建議；ARGS='--input data/pms-review/response.json'
 pms-model: ## 只用本機 PMS 照片訓練；SPLIT 必須是新版本名
 	$(TRAIN) src/pms.py train --name "$(SPLIT)"
 
-pms-retrain: ## 同步 PMS 後訓練；不自動切換目前模型
+pms-retrain: ## 同步 PMS 後訓練；不自動切換（自動切換只走 make daily 的公平考卷）
 	$(TRAIN) src/pms.py train --name "$(SPLIT)" --sync
 
 help:

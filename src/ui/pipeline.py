@@ -11,6 +11,7 @@ import streamlit as st
 
 import paths
 import split as split_mod
+from pipeline import pms_workflow
 
 from .common import txt
 
@@ -86,21 +87,6 @@ def evidence_view(d2) -> None:
     )
 
 
-def _next_split_name() -> str:
-    """v8 → v9。看不懂的名字就退回加 -b，不要猜。"""
-    import re
-
-    have = {p.stem for p in paths.SPLITS.glob("v*.json")}
-    cur = split_mod.current()
-    m = re.fullmatch(r"v(\d+)", cur)
-    if not m:
-        return f"{cur}-b" if f"{cur}-b" not in have else f"{cur}-c"
-    n = int(m.group(1))
-    while f"v{n}" in have:
-        n += 1
-    return f"v{n}"
-
-
 def run_pipeline(name: str, with_data: bool) -> None:
     """README「新照片進來之後」那條鏈，跑在同一個 process 裡。
 
@@ -139,7 +125,9 @@ def pipeline_panel() -> None:
     st.caption(f"操作台現在看的是 **{cur}**。跑完**不會自動切換**，分數看過覺得可以，再按最下面那顆。")
     c1, c2, c3 = st.columns([2, 2, 2])
     name = c1.text_input(
-        "新的 split 名字", _next_split_name(), help="每次給新名字。原地覆蓋的話，同名舊報告的分母就對不上了。"
+        "新的 split 名字",
+        pms_workflow.next_version(),
+        help="每次給新名字。原地覆蓋的話，同名舊報告的分母就對不上了。",
     )
     full = c2.button(
         "▶ 全鏈重跑",
