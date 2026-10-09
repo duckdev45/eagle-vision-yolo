@@ -682,15 +682,12 @@ def test_core_services_are_real_not_stubs():
     import contractdata
     import labels
     import qsdata
-    import review
     from core import contractdata as c_contract
     from core import labeler as c_labeler
     from core import qs_data as c_qs
-    from core import review_utils as c_review
 
     assert labels.Labeler is c_labeler.Labeler
     assert labels.save_review is c_labeler.save_review
-    assert review.build is c_review.build and review.scores is c_review.scores
     assert qsdata.load is c_qs.load and qsdata.emit_phases is c_qs.emit_phases
     assert contractdata.load is c_contract.load
     assert contractdata.cross_check is c_contract.cross_check

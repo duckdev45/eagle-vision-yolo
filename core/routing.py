@@ -339,15 +339,22 @@ def queue_items() -> pd.DataFrame:
 
 
 def resolve(
-    file_id: str, *, reviewer: str, label: str = "", action: str = "classified", reason: str = ""
+    file_id: str,
+    *,
+    reviewer: str,
+    label: str = "",
+    action: str = "classified",
+    reason: str = "",
+    boxes: list | None = None,
 ) -> None:
-    """收件匣與未來標註平台寫回人審結果的唯一入口——走工作台同一條 decide()，不另開寫入路徑。"""
+    """收件匣、標框頁與未來標註平台寫回人審結果——走工作台同一條 decide()，不另開寫入路徑。"""
     pms_review.decide(
         file_id,
         action,
         reviewer=reviewer,
         label=label,
         reason=reason or ("inbox" if action == "classified" else ""),
+        boxes=boxes,
     )
 
 

@@ -40,6 +40,7 @@ def test_workbench_empty_install(pms_env, section):
 
 def test_manual_photo_confirmation_in_ui(pms_env):
     result = app("photos").run()
+    result.selectbox(key="pms_photo_filter").set_value("全部")  # 沒跑分流＝沒有「待複核」，看全部
     result.text_input(key="pms_reviewer").set_value("ui-tester")
     result.text_input(key="pms_photo_search").set_value("打底施作").run()
     assert not result.exception
@@ -54,6 +55,7 @@ def test_manual_photo_confirmation_in_ui(pms_env):
 
 def test_defect_flag_toggle_in_ui_keeps_trade_verdict(pms_env):
     result = app("photos").run()
+    result.selectbox(key="pms_photo_filter").set_value("全部")  # 沒跑分流＝沒有「待複核」，看全部
     result.text_input(key="pms_reviewer").set_value("ui-tester")
     result.text_input(key="pms_photo_search").set_value("打底施作").run()
     next(box for box in result.checkbox if box.label.startswith("這張是缺失改善照")).check()

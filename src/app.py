@@ -7,7 +7,7 @@
     inbox.py         收件匣（每日分流後要人看的照片）＋總覽頁的排程狀態
     data.py          快取載入器（manifest）
     pipeline.py      重跑管線 + 判斷依據（遮擋法）
-    review_ui.py     複核佇列 + 標框畫布
+    review_ui.py     進階複核（收件匣同一份佇列）+ 標框畫布
     report_view.py   報告格式
     pms_page.py      PMS 分頁路由
     pms_workbench.py 照片工種分類、新工種候選與審閱包

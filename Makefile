@@ -65,8 +65,8 @@ use: ## 手動把操作台切到 SPLIT 那一版（自動切換走 make daily �
 journal: ## 只重寫 reports/JOURNAL.md（不重算任何東西，隨時可跑）
 	uv run src/journal.py
 
-queue: ## 印出還沒裁的複核佇列（裁決要人做，在 make app 的 ④）
-	$(TRAIN) src/review.py
+queue: ## 印出待人看的照片（與收件匣同一份分流結果；ARGS='--reason 標題沒有對應規則'）
+	uv run src/review.py $(ARGS)
 
 newclass: ## 沒被規則認領的照片 → 下一批新工種的候選詞
 	uv run src/newclass.py

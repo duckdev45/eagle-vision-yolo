@@ -1,98 +1,91 @@
-"""複核佇列 + 標框畫布。依賴 pipeline._cams（熱區快取）。"""
+"""進階複核：收件匣同一份佇列，多了熱區與標框畫布。依賴 pipeline._cams（熱區快取）。
+
+「哪些照片要人看」只有一份規則（core/routing.py）。這頁以前用自己的四層分類
+（core/review_utils.py，2026-10-09 刪除），跟收件匣給不同答案；現在只差在「能畫證據框」。
+寫入走 routing.resolve()（＝工作台同一條 decide），框跟著裁決一起存。
+"""
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from core import model_registry as registry
-from core import paths
+from core import paths, routing
+from core import pms_review as review
 
-from .common import badge, txt
+from .common import reviewer_input, txt
 from .data import labeled
 from .pipeline import _cams
 from .pms_ai import ai_panel, latest_suggestions, suggestion_card
 
 CANVAS_W = 460  # 畫布寬度（px）。框存的是 0~1000 比例，換裝置不會跑掉
+_REF_COLUMNS = ["fileId", "clsChips", "specTrade", "predWorkItem"]
+_SIGNAL = {"oof": "交叉驗證", "live": "上線模型"}
+
+
+def _queue() -> pd.DataFrame:
+    """收件匣佇列＋標題、案場與人寫的參考答案（查驗重點、specKey、Gemini 作答）。"""
+    from labels import Labeler
+
+    items = routing.queue_items()
+    if items.empty:
+        return items
+    pool = review.load_pool()[["fileId", "title", "constrName", "chipsOn"]]
+    refs = labeled()
+    refs = refs[[c for c in _REF_COLUMNS if c in refs]] if len(refs) else pd.DataFrame(columns=["fileId"])
+    q = items.merge(pool, on="fileId", how="left").merge(refs, on="fileId", how="left")
+    lab = Labeler.load()
+    q["gemNorm"] = [
+        (lab.label(t) or None) if isinstance(t, str) and t else None for t in q.get("predWorkItem", [])
+    ]
+    return q
 
 
 def review_queue() -> None:
-    """值得人看的照片排成佇列。四種訊號，照「證據強度」分層。
+    from labels import orphan_reviews
 
-    參考答案（誰說這張是什麼）：
-      1. `chipsOn`  工地主任自己打的查驗重點——**人寫的**
-      2. `specKey`  前端點選的工種——**人選的**，與規則一致率 98.6%
-      3. `predWorkItem` Gemini 的作答——**機器答的**，只能當提示，不能當答案
-
-    模型訊號（主動學習）：
-      4. 上線那顆探針的預測與**邊際**（top1 機率 − top2 機率）
-
-    前三種問的是「標籤對不對」，第四種問的是「模型會不會」。兩件事不一樣：
-    實測 520 張裡只有 58 張有標籤分歧，剩下 462 張就算模型答錯也沒人會看到。
-    補上模型訊號才補得到那個洞。裁決寫進 data/review.csv，`Labeler.apply` 蓋掉規則。
-    """
-    from labels import Labeler, load_reviews, orphan_reviews, save_review
-
-    st.subheader("複核佇列")
+    st.subheader("進階複核（含證據框）")
+    st.caption(
+        "佇列與收件匣相同；這裡多了模型熱區與標框畫布。框會餵進訓練（人標框裁切），不是只給人看的註記。"
+    )
     orphan = orphan_reviews()
     if orphan:
         st.error(
             f"{len(orphan)} 筆裁決指到已不存在的類別 {sorted(set(orphan.values()))}"
             " —— 那些照片會被丟掉。類別改過名的話，重裁一次補上新名字。"
         )
-    df = labeled()
-    if not len(df):
-        st.info("還沒有照片。")
+    q = _queue()
+    if q.empty:
+        st.success("佇列是空的（或還沒分流：收件匣那頁可以立即分流）。")
         return
-    lab = Labeler.load()
-    classes = sorted(df.cls.unique().tolist())
-    cur = registry.current()
-    # 分層規則在 review.py，操作台與 `uv run src/review.py` 共用同一份——
-    # 規則抄兩份的話，畫面上看到的佇列跟命令列印的會慢慢對不起來。
-    import review as review_mod
+    classes = sorted(review.catalog())
 
-    scores, test_ids = review_mod.scores(None, cur)
-    q = review_mod.build(df, lab, scores, test_ids)
-    names = review_mod.TIER_NAMES
-    tier_n = q.tier.value_counts().to_dict()  # 先存，下面的篩選會改 q
-    done = load_reviews()
-
-    c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
-    pick_tiers = c1.multiselect(
-        "看哪幾批", [names[t] for t in (4, 3, 2, 1)], default=[names[t] for t in (4, 3, 2, 1)]
-    )
-    keep = {t for t, n in names.items() if n in pick_tiers}
-    q = q[q.tier.isin(keep)]
-    if c2.toggle("只看還沒裁的", value=True):
-        q = q[~q.fileId.isin(done)]
+    c1, c3, c4 = st.columns([4, 2, 2])
+    present = [w for w in routing.REASONS if q.reason.str.contains(w, regex=False).any()]
+    pick = c1.multiselect("看哪些原因", present, default=present)
+    q = q[q.reason.apply(lambda r: any(w in r for w in pick))]
     per = c3.select_slider("一頁幾張", [6, 12, 24, 48], value=12)
-    # 同一層裡最新的排前面：舊照片的標籤問題多半已經在前幾輪裁過了
-    q = q.sort_values(["tier", "syncedAt", "reportDate"], ascending=False, kind="stable")
     pages = max(1, -(-len(q) // per))
     page = c4.number_input(f"第幾頁（共 {pages}）", 1, pages, 1)
-
-    st.caption(
-        " · ".join(f"**{names[t]}** {tier_n.get(t, 0)}" for t in (4, 3, 2, 1))
-        + f" · 已裁 {len(done)} · 符合篩選 {len(q)}"
-    )
+    st.caption(f"符合篩選 {len(q)} 張 · 排序與收件匣相同（規則與模型吵架的先看）")
     if not len(q):
-        st.success("這批裁完了。要讓裁決進到模型，回 ① 同步那頁重跑一次。")
+        st.info("這個條件下沒有照片。")
         return
 
     if ai_panel(q, key="pms_queue_ai") is not None:
         st.cache_data.clear()
         st.rerun()
-    reviewer = st.text_input("AI 建議確認者", key="pms_queue_reviewer", placeholder="採用 AI 建議時填寫")
+    reviewer = reviewer_input()
     suggestions = latest_suggestions()
     page_rows = list(q.iloc[(page - 1) * per : page * per].itertuples())
     for row0 in range(0, len(page_rows), 2):
         for col, r in zip(st.columns(2), page_rows[row0 : row0 + 2]):
             with col, st.container(border=True):
-                _review_card(r, classes, done, save_review, names)
+                _review_card(r, classes, reviewer)
                 if proposal := suggestions.get(r.fileId):
-                    from core import pms_review
-
                     revision_key = f"pms_revision:queue:{r.fileId}"
-                    expected = st.session_state.setdefault(revision_key, pms_review.revision(r.fileId))
+                    expected = st.session_state.setdefault(revision_key, review.revision(r.fileId))
                     if suggestion_card(
                         proposal, reviewer, key=f"pms_queue_accept_{r.fileId}", expected_revision=expected
                     ):
@@ -197,7 +190,7 @@ def _boxes_now() -> dict:
     return _boxes_cached(paths.REVIEW.stat().st_mtime if paths.REVIEW.exists() else 0.0)
 
 
-def _review_card(r, classes, done, save_review, names) -> None:
+def _review_card(r, classes, reviewer: str) -> None:
     img = paths.IMAGES / f"{r.fileId}.jpg"
     hit = _cams(registry.current()).get(r.fileId)
     n_old = len(_boxes_now().get(r.fileId) or [])
@@ -222,33 +215,34 @@ def _review_card(r, classes, done, save_review, names) -> None:
         st.image(str(img), width="stretch")
     drawn = _draw_boxes(r, img, cam_box) if (mark and img.exists()) else None
 
-    st.markdown(f"{badge('test' if r.isTest else 'train')} **{txt(r.title)}**", unsafe_allow_html=True)
+    st.markdown(f"**{txt(r.title)}**")
+    # 抽查照不告訴看的人「這是抽查」（同收件匣）：知道機器確認過，人就容易照單全收
+    why = "例行確認" if r.bucket == "audit" else r.reason
+    signal = _SIGNAL.get(r.signal, "")  # 兩種都是「沒背過這張」的模型給的，信心可信
     st.caption(
-        f"`{names[r.tier]}`　{r.why}　·　{txt(r.reportDate)} · {txt(r.constrName)}"
-        + ("" if r.isTest else "　·　模型背過這張，它的信心偏樂觀")
+        f"{why}　·　{txt(r.reportDate)} · {txt(r.constrName)}"
+        + (f"　·　模型訊號：{signal}" if signal else "")
     )
 
-    src = [("規則", r.cls, True)]
+    src = [("規則", r.ruleClass or None, True)]
     if isinstance(getattr(r, "clsChips", None), str):
         src.append(("查驗項目", r.clsChips, True))
     if isinstance(getattr(r, "specTrade", None), str):
         src.append(("specKey", r.specTrade, False))
     if isinstance(r.gemNorm, str):
         src.append(("Gemini", r.gemNorm, True))
-    if isinstance(r.mPred, str):
-        m = f"{r.mPred}（信心 {r.mConf:.2f}・邊際 {r.mMargin:.2f}）"
-        src.append(("模型", m, True))
+    if isinstance(r.modelClass, str) and r.modelClass:
+        conf = r.modelConfidence
+        src.append(("模型", r.modelClass + ("" if conf != conf else f"（信心 {conf:.2f}）"), True))
     st.markdown(" ".join(f"<span class=src>{k}</span> `{txt(v)}`" for k, v, _ in src), unsafe_allow_html=True)
 
     with st.expander("原文"):
-        st.write(f"Gemini：{txt(r.predWorkItem)}")
+        st.write(f"Gemini：{txt(getattr(r, 'predWorkItem', None))}")
         chips_txt = getattr(r, "chipsOn", None)
         if isinstance(chips_txt, str):
             st.write("人手打的查驗重點：")
             st.write("\n".join(f"- {x}" for x in chips_txt.split("|")))
 
-    if r.fileId in done:
-        st.info(f"已裁：{done[r.fileId]}")
     # 建議選項放前面（specKey 只到工種，不能直接當答案，所以不進建議）
     head = [
         v.split("（")[0]
@@ -266,8 +260,14 @@ def _review_card(r, classes, done, save_review, names) -> None:
     )
     c2.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
     if c2.button("儲存紀錄", key=f"bt_{r.fileId}", type="primary", width="stretch"):
-        # 沒開標框模式就別動既有的框——沒展開畫布不代表要把框清掉
-        save_review(r.fileId, pickd, "", boxes=drawn if mark else (_boxes_now().get(r.fileId) or None))
+        # 沒開標框模式就別動既有的框——沒展開畫布不代表要把框清掉（boxes=None＝保留既有）
+        try:
+            routing.resolve(
+                r.fileId, reviewer=reviewer, label=pickd, reason="進階複核", boxes=drawn if mark else None
+            )
+        except ValueError as exc:
+            st.error(str(exc))
+            return
         st.cache_data.clear()
         # 刻意不 st.rerun()：那會把分頁彈回 ①。佇列下次互動才刷新，換來不會跳走
         st.success(f"已紀錄 {pickd}" + (f"，含 {len(drawn)} 個框" if drawn else ""))

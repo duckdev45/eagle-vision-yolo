@@ -173,7 +173,7 @@ def build_judgements(salt: str, buckets: dict[str, str], lab: Labeler, allowed: 
             skipped_no_manifest += 1  # 非 PMS 日報源（legacy/QMS）v1 不收
             continue
         if human not in allowed["taxonomy"]:
-            skipped_orphan += 1  # 類別改名留下的孤兒裁決，見 review.py --orphans
+            skipped_orphan += 1  # 類別改名留下的孤兒裁決，見 `make queue`
             continue
         meta = ctx.loc[file_id]
         constr = str(meta.constrId or "")
@@ -406,9 +406,7 @@ def export_pack(
     )
     log(f"  缺失框 {len(boxes)} 列 · QS 判準 {len(qs_rows)} 列 · 案場代號 {len(buckets)} 個")
     if stats["skippedOrphanClass"]:
-        log(
-            f"  ⚠ {stats['skippedOrphanClass']} 筆裁決指向已不存在的類別，未外售（uv run src/review.py --orphans）"
-        )
+        log(f"  ⚠ {stats['skippedOrphanClass']} 筆裁決指向已不存在的類別，未外售（`make queue` 會列出）")
     if stats["skippedNoManifest"]:
         log(f"  · {stats['skippedNoManifest']} 筆非 PMS 日報源或缺日期，v1 不收")
     log(f"  回推對照表（不可外流）：{sidecar}")

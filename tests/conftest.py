@@ -64,3 +64,36 @@ def pms_env(tmp_path, monkeypatch):
         Image.new("RGB", (60, 40), (120, 130, 140)).save(paths.PHOTOS / f"{fid}.jpg")
     pd.DataFrame(rows).to_csv(paths.MANIFEST, index=False)
     yield {"root": tmp_path, "cfg": cfg, "rows": rows}
+
+
+@pytest.fixture()
+def route_queue(pms_env):
+    """寫一份「最近一次分流」：指定照片在人工佇列。收件匣、進階複核、工作台、make queue 都讀它。"""
+    import json
+
+    from core import routing
+
+    def write(file_ids: list[str], reason: str = "模型信心不足") -> None:
+        paths.ROUTE.mkdir(parents=True, exist_ok=True)
+        rows = [
+            {
+                "fileId": f,
+                "bucket": "queue",
+                "reason": reason,
+                "priority": routing.REASONS.index(reason),
+                "ruleClass": "",
+                "modelClass": "",
+                "modelConfidence": "",
+                "signal": "live",
+                "stageSource": "",
+                "reportDate": "2026-08-01",
+            }
+            for f in file_ids
+        ]
+        pd.DataFrame(rows, columns=routing.COLUMNS).to_csv(paths.ROUTE / "latest.csv", index=False)
+        (paths.ROUTE / "latest.json").write_text(
+            json.dumps({"routedAt": "2026-08-02T00:00:00+00:00", "model": "v9", "counts": {}}),
+            encoding="utf-8",
+        )
+
+    return write

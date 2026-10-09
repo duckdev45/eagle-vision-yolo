@@ -63,7 +63,6 @@ def test_workforce_cannot_enter_review_operations(pms_env, operation):
 
 def test_training_and_review_share_source_filter_even_with_old_override(pms_env):
     import newclass
-    import review as review_cli
     from labels import labeled_manifest, pending_classes, unclaimed
     from ui import data as ui_data
 
@@ -75,7 +74,7 @@ def test_training_and_review_share_source_filter_even_with_old_override(pms_env)
         paths.LABELS_YAML.read_text().replace("min_class_size: 2", "min_class_size: 1")
     )
     ui_data._manifest.clear()
-    for df in (labeled_manifest(), review_cli._labeled()[0], ui_data.labeled()):
+    for df in (labeled_manifest(), ui_data.labeled()):
         assert "worker-labelled" not in set(df.fileId)
         assert set(df.source) == {"WORK_ITEM"}
     assert pending_classes().empty

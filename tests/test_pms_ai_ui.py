@@ -16,7 +16,7 @@ from core.labeler import load_reviews
 
 
 @pytest.mark.parametrize("section", ["photos", "queue"])
-def test_ai_buttons_save_suggestions_then_human_accepts(pms_env, monkeypatch, section):
+def test_ai_buttons_save_suggestions_then_human_accepts(pms_env, route_queue, monkeypatch, section):
     monkeypatch.setenv("OPENAI_API_KEY", "test-only")
     monkeypatch.setenv("PMS_OPENAI_MODEL", "test-vision")
     paths.LABELS_YAML.write_text(
@@ -25,6 +25,7 @@ def test_ai_buttons_save_suggestions_then_human_accepts(pms_env, monkeypatch, se
     df = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False)
     df.loc[df.fileId == "a", "predWorkItem"] = "油漆"
     df.to_csv(paths.MANIFEST, index=False)
+    route_queue(["a"])  # 兩頁的「待人看」都來自同一份分流
     st.cache_data.clear()
     module = (
         "from ui.pms_workbench import workbench\nworkbench('photos')"
@@ -74,7 +75,7 @@ def test_ai_buttons_save_suggestions_then_human_accepts(pms_env, monkeypatch, se
         result.text_input(key="pms_reviewer").set_value("human-tester").run()
         accept_key = "pms_accept_a"
     else:
-        result.text_input(key="pms_queue_reviewer").set_value("human-tester").run()
+        result.text_input(key="pms_reviewer").set_value("human-tester").run()
         accept_key = "pms_queue_accept_a"
     assert any("標題描述打底" in str(item.value) for item in result.markdown)
     result.button(key=accept_key).click().run()

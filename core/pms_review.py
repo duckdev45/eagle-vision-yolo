@@ -20,7 +20,7 @@ from PIL import Image, ImageOps
 from core import model_registry as registry
 from core import paths
 from core import pms_store as store
-from core.evaluation_metrics import REVIEW_CONFIDENCE, fuse_work_items
+from core.evaluation_metrics import fuse_work_items
 from core.labeler import Labeler, load_boxes, load_reviews, save_review
 from core.pms_source import work_items
 
@@ -142,7 +142,6 @@ def set_defect(file_id: str, defect: bool, *, reviewer: str) -> None:
 STAGE_CLASSES = ("泥作-打底", "泥作-粉光")
 STAGE_GROUP = 0.6
 STAGE_SHARE = 0.8
-STAGE_MANUAL = "泥作打底／粉光階段待人工"
 
 
 def title_stage(title) -> str:
@@ -246,6 +245,13 @@ def revision(file_id: str) -> str:
 
 
 def snapshot(model: dict | None = None) -> tuple[pd.DataFrame, dict]:
+    """工作台的逐張檢視。「要不要人看」不在這裡判斷——一律採用最近一次分流（core/routing.py），
+    收件匣、工作台、`make pms-status`、`make queue` 才會是同一個數字（2026-10-09 前三處各算一套，
+    同一批照片給出 478／190／376 三個答案）。"""
+    from core import routing  # routing 也 import 本模組，延遲載入避免循環
+
+    open_items = routing.queue_items()
+    routed = dict(zip(open_items.fileId, open_items.reason))
     pool = load_pool()
     model = local_model() if model is None else model
     known = catalog()
@@ -275,21 +281,9 @@ def snapshot(model: dict | None = None) -> tuple[pd.DataFrame, dict]:
         )
         pred, conf, margin = model["scores"].get(fid, ("", None, None))
         part = "test" if fid in test_ids else "train" if fid in train_ids else "unseen"
-        reasons = []
-        if route != "known":
+        reasons = [routed[fid]] if fid in routed and action == "pending" else []
+        if route == "invalid":
             reasons.append(ROUTES[route])
-        if pred and label and pred != label:
-            reasons.append("照片模型與標籤不同")
-        if margin is not None and margin < 0.25 and part != "train":
-            reasons.append("照片模型難分")
-        elif conf is not None and conf < REVIEW_CONFIDENCE and part != "train":
-            reasons.append("照片模型信心低")
-        if not pred:
-            reasons.append("尚無照片模型預測")
-        if model.get("stage", {}).get(fid) == "manual" and not reviewed:
-            reasons.append(STAGE_MANUAL)
-        if label == "雜項-缺失改善" and not reviewed:
-            reasons.append("缺失改善照：工種待看圖確認")
         score = model.get("defectScore", {}).get(fid)
         threshold = model.get("defectThreshold")
         human_defect = defect_marks.get(fid)
@@ -307,8 +301,10 @@ def snapshot(model: dict | None = None) -> tuple[pd.DataFrame, dict]:
             from core.pms_exchange import context_of
 
             current_suggestion = suggestion.get("contextHash") == store.digest(context_of(r))
-        if suggestion and action == "pending":
-            reasons.append("有看圖審閱建議待確認" if current_suggestion else "看圖審閱建議已過期")
+        if suggestion and action == "pending":  # 只是提示，不影響「要不要人看」
+            notes = [*reasons, "有看圖審閱建議待確認" if current_suggestion else "看圖審閱建議已過期"]
+        else:
+            notes = reasons
         rows.append(
             {
                 **r,
@@ -324,8 +320,8 @@ def snapshot(model: dict | None = None) -> tuple[pd.DataFrame, dict]:
                 "part": part,
                 "route": route,
                 "reviewState": action,
-                "reviewReason": "；".join(reasons),
-                "needsReview": (action == "pending" and bool(reasons)) or route == "invalid",
+                "reviewReason": "；".join(notes),
+                "needsReview": bool(reasons),
                 "suggestion": suggestion,
                 "suggestionCurrent": current_suggestion,
             }
@@ -367,7 +363,12 @@ def decide(
     reason: str = "",
     proposal_id: str = "",
     expected_revision: str | None = None,
+    boxes: list | None = None,
 ) -> None:
+    """人審寫回的唯一入口（收件匣、工作台、標框頁、未來標註平台都走這裡）。
+
+    `boxes` 給了就換成這組證據框（0~1000 比例）；不給就保留這張照片既有的框。
+    """
     _photos([file_id])
     reviewer = _reviewer(reviewer)
     if expected_revision is not None and revision(file_id) != expected_revision:
@@ -392,8 +393,7 @@ def decide(
         ensure_ascii=False,
     )
     if action == "classified":
-        # 只改照片類別；保留舊複核介面曾畫過的證據框。
-        save_review(file_id, label, note, boxes=load_boxes().get(file_id))
+        save_review(file_id, label, note, boxes=boxes if boxes is not None else load_boxes().get(file_id))
     store.append(
         [
             (

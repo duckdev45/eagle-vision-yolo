@@ -1,7 +1,7 @@
 """收件匣：每日分流後真正需要人看的照片，一次一張、一鍵裁決。
 
 只做畫面；分流規則在 core/routing.py，寫入走 routing.resolve()（= 工作台同一條 decide）。
-取代舊「③ 照片工種／④ 進階複核」的日常用途——那兩頁還在「進階」裡，畫框、缺失旗標、提新類仍去那邊。
+「進階複核」是同一份佇列加上標框畫布；「照片工種」做缺失旗標與提新類。三處讀的都是同一份分流結果。
 """
 
 from __future__ import annotations
@@ -131,7 +131,7 @@ def inbox() -> None:
         if n2.button("略過 →", key="inbox_next", disabled=idx >= len(items) - 1):
             st.session_state[_IDX] = idx + 1
             st.rerun()
-        st.caption("畫證據框、標缺失旗標、提新工種：到「進階 → 照片工種」。")
+        st.caption("畫證據框：「進階 → 進階複核」（同一份佇列）；標缺失旗標、提新工種：「進階 → 照片工種」。")
 
 
 def status_panel() -> None:

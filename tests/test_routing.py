@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from core import paths, routing
+from core import paths, pms_review, routing
 from core.labeler import load_reviews
 
 TODAY = date(2026, 10, 9)
@@ -214,3 +214,41 @@ def test_audit_precision_counts_only_reviewed_samples(pms_env):
         ]
     ).to_csv(paths.REVIEW, index=False)
     assert routing.audit_precision() == {"sampled": 3, "reviewed": 2, "agree": 1, "precision": 0.5}
+
+
+def test_every_view_reads_the_same_queue(pms_env, monkeypatch, capsys):
+    """收件匣、工作台（pms-status）、make queue 對「誰要人看」只能有一個答案。"""
+    import review as review_cli
+
+    signals = pd.DataFrame(
+        {
+            "fileId": ["a", "b", "u1"],
+            "modelClass": ["泥作-打底", "泥作-打底", "泥作-打底"],
+            "modelConfidence": [0.99, 0.99, 0.5],
+            "stageSource": ["model"] * 3,
+            "signal": ["oof", "oof", "live"],
+        }
+    )
+    monkeypatch.setattr(
+        routing, "model_signals", lambda log=print: (signals, {"model": "v9", "modelClasses": ["泥作-打底"]})
+    )
+    routing.build(today=TODAY, log=lambda *a: None)
+    inbox = set(routing.queue_items().fileId)
+    assert inbox
+    snap, _ = pms_review.snapshot(
+        {"name": "v9", "classes": [], "scores": {}, "stage": {}, "train": [], "test": [], "warning": ""}
+    )
+    assert set(snap[snap.needsReview.astype(bool)].fileId) == inbox
+    assert review_cli.main([]) == 0
+    assert f"待看 {len(inbox)} 張" in capsys.readouterr().out
+    reasons = dict(zip(routing.queue_items().fileId, routing.queue_items().reason))
+    assert all(snap.set_index("fileId").reviewReason[f].startswith(reasons[f]) for f in inbox)
+
+
+def test_resolve_keeps_or_replaces_evidence_boxes(pms_env):
+    from core.labeler import load_boxes
+
+    routing.resolve("b", reviewer="tester", label="油漆-塗裝", boxes=[[0, 0, 500, 500]])
+    assert load_boxes()["b"] == [[0, 0, 500, 500]]
+    routing.resolve("b", reviewer="tester", label="泥作-打底")  # 沒給框＝保留既有的框
+    assert load_boxes()["b"] == [[0, 0, 500, 500]] and load_reviews()["b"] == "泥作-打底"

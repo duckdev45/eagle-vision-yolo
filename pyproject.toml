@@ -89,7 +89,6 @@ ignore = [
 "src/qsdata.py" = ["F401", "F403"]
 "src/contractdata.py" = ["F401", "F403"]
 "src/labels.py" = ["F401"]
-"src/review.py" = ["F401"]
 "tests/test_core.py" = ["F401"]       # 測試容許寬鬆 import
 
 [tool.ruff.format]

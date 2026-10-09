@@ -1,115 +1,61 @@
-"""複核佇列 CLI。分層規則的實體在 core/review_utils.py（服務層），
-操作台 ui/review_ui.py 與本 CLI 共用同一份——規則抄兩份的話，畫面上
-看到的佇列跟命令列印的會慢慢對不起來。
+"""待人看的照片清單（CLI）。清單本身由每日分流算好（core/routing.py），這裡只印——
+收件匣、工作台、`make pms-status` 與本 CLI 讀的是同一份，數字不會各說各話。
 
-    uv run src/review.py                # 還沒裁的，照優先序印
-    uv run src/review.py --since 2026-08-19   # 某天之後才進來的
+    uv run src/review.py                      # 原因統計＋前 30 張（make queue）
+    uv run src/review.py --reason 標題沒有對應規則   # 只看某個原因（舊 --orphans＝規則沒接住的）
+    uv run src/review.py --since 2026-08-19   # 只看某天之後的日報
+
+分流結果是最近一次 `make daily`／`make route` 的；要最新就先跑 `make route`。
 """
 
 from __future__ import annotations
 
 import argparse
-import os
-import sys
 
-import pandas as pd
-
-from core import model_registry as registry
-from core import paths
-from core.pms_source import work_items
-from core.review_utils import TIER_NAMES, build, scores
-from labels import Labeler, human_refs, load_reviews
-
-__all__ = ["TIER_NAMES", "build", "queue", "scores"]
+from core import routing
+from core.labeler import orphan_reviews
+from core.pms_review import load_pool
 
 
-def _labeled() -> tuple[pd.DataFrame, Labeler]:
-    """manifest + 規則標籤 + 人寫的兩個參考答案。與 app.labeled() 同一套，
-    但不經過 Streamlit 的 cache_data（那個裝飾器在無 st context 下會炸）。"""
-    from sync import _truthy
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--reason", default="", help=f"只看某個原因：{'、'.join(routing.REASONS)}")
+    ap.add_argument("--since", default="", help="只看 reportDate >= 這天的")
+    ap.add_argument("--limit", type=int, default=30)
+    a = ap.parse_args(argv)
 
-    df = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
-    df = work_items(df)
-    if "active" in df:
-        df = df[_truthy(df.active)]
-    lab = Labeler.load()
-    out = lab.apply(df)
-    return out.join(human_refs(out, lab)), lab
-
-
-def queue(split_name: str = "", since: str = "") -> pd.DataFrame:
-    df, lab = _labeled()
-    sc, test_ids = scores(None, split_name or registry.current())
-    q = build(df, lab, sc, test_ids)
-    done = set(load_reviews())
-    q = q[~q.fileId.isin(done)]
-    if since:
-        q = q[q.reportDate.fillna("") >= since]
-    return q.sort_values(["tier", "syncedAt", "reportDate"], ascending=False, kind="stable")
-
-
-def orphan_queue() -> pd.DataFrame:
-    """孤兒：規則沒接住的照片（fallback / 無規則命中）。複核佇列的母體看不到它們。
-
-    `lab.apply` 的 drop_fallback 把這批排在 labeled 母體外，所以這裡自己撈——
-    操作台「⑤ 孤兒院」曾畫同一份（`ui/orphan_ui.py`，2026-10-09 已刪，見 ROADMAP）——
-    現在孤兒裁決只剩這支 CLI（`--orphans`）。
-    """
-    df, lab = _labeled_raw()
-    from core.review_utils import orphans as build_orphans
-
-    o = build_orphans(df, lab)
-    return o[~o.fileId.isin(load_reviews())]
-
-
-def _labeled_raw() -> tuple[pd.DataFrame, Labeler]:
-    """未丟 fallback 的母體（drop_small=False），孤兒偵測用。"""
-    from sync import _truthy
-
-    df = pd.read_csv(paths.MANIFEST, dtype=str, keep_default_na=False, na_values=[""])
-    df = work_items(df)
-    if "active" in df:
-        df = df[_truthy(df.active)]
-    lab = Labeler.load()
-    return df, lab
+    q = routing.queue_items()
+    _, meta = routing.latest()
+    if not meta:
+        print("還沒有分流結果：先跑 `make route`。")
+        return 1
+    print(f"分流 {meta.get('routedAt', '?')} · 模型 {meta.get('model', '?')} · 待看 {len(q)} 張")
+    if orphan := orphan_reviews():
+        print(f"⚠ {len(orphan)} 筆裁決指到已不存在的類別 {sorted(set(orphan.values()))}——重裁補上新名字")
+    if a.reason:
+        q = q[q.reason.str.contains(a.reason, regex=False)]
+    if a.since:
+        q = q[q.reportDate.fillna("") >= a.since]
+    for w in routing.REASONS:
+        n = int(q.reason.str.contains(w, regex=False).sum())
+        if n:
+            print(f"  {w}：{n} 張")
+    if q.empty:
+        print("沒有符合條件的照片。")
+        return 0
+    pool = load_pool()
+    titles = dict(zip(pool.fileId, pool.title))
+    print(f"\n前 {min(a.limit, len(q))} 張（越前面越該先看）：")
+    print(f"{'fileId':10} {'reportDate':11} {'規則':14} {'模型':14} 原因｜標題")
+    for r in q.head(a.limit).itertuples():
+        reason = "例行確認" if r.bucket == "audit" else r.reason  # 抽查照不露底，同收件匣
+        print(
+            f"{str(r.fileId)[:8]:10} {r.reportDate!s:11} {r.ruleClass or '—':14} {r.modelClass or '—':14}"
+            f" {reason}｜{titles.get(r.fileId, '')}"
+        )
+    print("\n裁決在 `make pms-app` 的收件匣（要畫證據框到「進階 → 進階複核」）。")
+    return 0
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--split", default="", help="用哪一版模型算「難分」，預設 CURRENT")
-    ap.add_argument("--since", default="", help="只看 reportDate >= 這天的")
-    ap.add_argument("--limit", type=int, default=30)
-    ap.add_argument("--orphans", action="store_true", help="看孤兒（規則沒接住的）而不是複核佇列")
-    a = ap.parse_args()
-
-    cur = a.split or registry.current()
-    if a.orphans:
-        o = orphan_queue()
-        print(f"模型 {cur} · 孤兒 {len(o)} 張（規則沒接住，裁完才會進訓練）")
-        if not len(o):
-            print("沒有孤兒。")
-            sys.exit(0)
-        print(f"{'fileId':10} {'原因':8} {'reportDate':11} title")
-        for r in o.head(a.limit).itertuples():
-            print(f"{str(r.fileId)[:8]:10} {r.orphanWhy:8} {r.reportDate!s:11} {r.title}")
-        print("\n裁決要人做：`make app` → ⑤ 孤兒院（看鄰居決定歸哪類）。")
-        sys.exit(0)
-
-    q = queue(a.split, a.since)
-    cur = a.split or registry.current()
-    print(
-        f"模型 {cur} · 已裁 {len(load_reviews())} 筆 · 待裁 {len(q)} 張"
-        + (f"（reportDate >= {a.since}）" if a.since else "")
-    )
-    if not len(q):
-        print("佇列是空的。")
-        sys.exit(0)
-    for t in (4, 3, 2, 1):
-        n = int((q.tier == t).sum())
-        if n:
-            print(f"  第 {t} 層 {TIER_NAMES[t]}：{n} 張")
-    print(f"\n前 {min(a.limit, len(q))} 張（最強訊號在前）：")
-    print(f"{'fileId':10} {'層':>2} {'reportDate':11} {'現在的標籤':14} {'模型猜':14} 訊號")
-    for r in q.head(a.limit).itertuples():
-        print(f"{str(r.fileId)[:8]:10} {r.tier:>2} {r.reportDate!s:11} {r.cls!s:14} {r.mPred!s:14} {r.why}")
-    print("\n裁決要人做：`make app` → ④ 複核佇列。裁完 `make model SPLIT=vN` 才會進模型。")
+    raise SystemExit(main())
