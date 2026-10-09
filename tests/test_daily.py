@@ -145,3 +145,108 @@ def test_unattended_training_can_skip_the_slow_explain_step(pms_env):
     titles = [t for t, _ in pms_workflow.training_steps("v1", with_explain=False)]
     assert "更新圖像解釋" not in titles
     assert "更新圖像解釋" in [t for t, _ in pms_workflow.training_steps("v1")]
+
+
+# ── 編排主流程（src/daily.main）：排程無人值守，壞了只看得到紀錄，所以串接本身要測 ──────────
+SUMMARY = {
+    "model": "v9",
+    "counts": {"auto": 5, "audit": 1, "queue": 2, "quarantine": 0},
+    "auditPrecision": {},
+}
+
+
+@pytest.fixture()
+def orchestra(pms_env, monkeypatch):
+    """把每一步換成替身，記下呼叫順序；個別測試再把某一步換成會失敗的。"""
+    import daily
+    import features
+    import prepare
+    import sync
+    from core import routing
+    from pipeline import pms_workflow
+
+    calls: list[str] = []
+    monkeypatch.setattr(sync, "sync", lambda log=print: calls.append("sync"))
+    monkeypatch.setattr(prepare, "run", lambda kind, log=print: calls.append("prepare"))
+    monkeypatch.setattr(
+        features, "extract", lambda model_key, src, log=print: calls.append(f"features-{model_key}")
+    )
+    monkeypatch.setattr(routing, "build", lambda log=print: calls.append("route") or SUMMARY)
+    monkeypatch.setattr(daily, "training_debt", lambda: {"newReviews": 0, "newPhotos": 0, "daysSince": 1})
+    monkeypatch.setattr(pms_workflow, "next_version", lambda: "v12")
+    monkeypatch.setattr(
+        pms_workflow, "run", lambda name, log=print, with_explain=True: calls.append(f"train-{name}")
+    )
+
+    def promote(name, *, export, log=print):
+        assert export is daily.export_service_bundle  # 匯出由編排端注入，不是 core 自己找腳本
+        calls.append(f"promote-{name}")
+        return {"candidate": name, "baseline": "v9", "promoted": True, "reasons": []}
+
+    monkeypatch.setattr(promotion, "promote", promote)
+    return daily, calls
+
+
+def _log_records() -> list[dict]:
+    return [json.loads(line) for line in paths.DAILY_LOG.read_text(encoding="utf-8").splitlines()]
+
+
+def test_daily_quiet_day_routes_without_training(orchestra, capsys):
+    daily, calls = orchestra
+    assert daily.main([]) == 0
+    assert calls[:2] == ["sync", "prepare"] and calls[-1] == "route"
+    assert not any(c.startswith("train") for c in calls)
+    (record,) = _log_records()
+    assert record["retrain"]["go"] is False and set(record["steps"].values()) == {"ok"}
+    assert '"收件匣": 3' in capsys.readouterr().out  # queue + audit 是收件匣要人看的量
+
+
+def test_daily_failed_step_does_not_stop_the_rest(orchestra, monkeypatch, capsys):
+    """同步壞了（網路、帳密）照樣用本機資料分流；結束碼非 0 讓排程看得到。"""
+    import sync
+
+    daily, calls = orchestra
+
+    def offline(log=print):
+        raise ConnectionError("PMS 連不上")
+
+    monkeypatch.setattr(sync, "sync", offline)
+    assert daily.main([]) == 1
+    assert "route" in calls and "prepare" in calls
+    (record,) = _log_records()
+    assert record["steps"]["sync"].startswith("failed: ConnectionError")
+    assert record["steps"]["route"] == "ok"
+    assert '"失敗步驟": ["sync"]' in capsys.readouterr().out
+
+
+def test_daily_retrains_promotes_then_reroutes(orchestra, monkeypatch):
+    daily, calls = orchestra
+    monkeypatch.setattr(daily, "training_debt", lambda: {"newReviews": 25, "newPhotos": 0, "daysSince": 1})
+    assert daily.main(["--no-sync"]) == 0
+    assert "sync" not in calls
+    assert calls[-3:] == ["train-v12", "promote-v12", "route"]  # 切換後收件匣改用新模型重算
+    (record,) = _log_records()
+    assert record["retrain"]["name"] == "v12" and record["promotion"]["promoted"] is True
+
+
+def test_daily_failed_training_never_reaches_promotion(orchestra, monkeypatch):
+    from pipeline import pms_workflow
+
+    daily, calls = orchestra
+    monkeypatch.setattr(daily, "training_debt", lambda: {"newReviews": 25, "newPhotos": 0, "daysSince": 1})
+
+    def broken(name, log=print, with_explain=True):
+        raise RuntimeError("特徵缺")
+
+    monkeypatch.setattr(pms_workflow, "run", broken)
+    assert daily.main(["--no-sync"]) == 1
+    assert not any(c.startswith("promote") for c in calls)
+    assert "promotion" not in _log_records()[0]
+
+
+def test_daily_dry_run_touches_nothing(orchestra, monkeypatch):
+    daily, calls = orchestra
+    monkeypatch.setattr(daily, "training_debt", lambda: {"newReviews": 25, "newPhotos": 0, "daysSince": 1})
+    assert daily.main(["--dry-run"]) == 0
+    assert calls == ["route"]  # 不同步、不訓練、不切換
+    assert not paths.DAILY_LOG.exists()
